@@ -1,0 +1,12 @@
+{
+  "name": "flightsync-light-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test": "pnpm -r test",
+    "dev": "pnpm --filter flight-sync-light-desktop dev",
+    "build:desktop": "pnpm --filter flight-sync-light-desktop build",
+    "tauri:build": "pnpm --filter flight-sync-light-desktop exec tauri build"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

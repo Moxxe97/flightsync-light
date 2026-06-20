@@ -1,0 +1,32 @@
+{
+  "name": "@flightsync/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./geo": "./src/geo/index.js",
+    "./parsing": "./src/parsing/index.js",
+    "./parsing/merge-flights": "./src/parsing/merge-flights.js",
+    "./parsing/pdf-text": "./src/parsing/pdf-text.js",
+    "./tax": "./src/tax/index.js",
+    "./idb": "./src/idb/index.js",
+    "./data": "./src/data/index.js",
+    "./util": "./src/util/index.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "luxon": "^3.7.2",
+    "tz-lookup": "^6.1.25"
+  },
+  "peerDependencies": {
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.4"
+  }
+}

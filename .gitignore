@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.claude/
+.worktrees/
+
+# Firebase (debug log files already covered by *.log above)
+.firebase/
+.firebaserc
+
+# Local OAuth credentials — copy config.example.js to config.js and fill in.
+# Desktop-client "secret" is non-confidential per Google, but keeping it out of
+# git avoids GitHub secret-scanning noise once the repo is public.
+apps/desktop/src/config.js
+
+# Internal tooling / design scaffolding — not for the public repo
+.superpowers/
+docs/superpowers/

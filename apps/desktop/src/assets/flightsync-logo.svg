@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 160" width="480" height="160">
+  <defs>
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0A1628"/>
+      <stop offset="100%" style="stop-color:#0D2444"/>
+    </linearGradient>
+    <linearGradient id="trailGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2DD4BF;stop-opacity:0"/>
+      <stop offset="100%" style="stop-color:#2DD4BF;stop-opacity:0.9"/>
+    </linearGradient>
+    <linearGradient id="planeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F8FAFC"/>
+      <stop offset="100%" style="stop-color:#CBD5E1"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2DD4BF"/>
+      <stop offset="100%" style="stop-color:#38BDF8"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="bgClip">
+      <rect width="480" height="160" rx="16"/>
+    </clipPath>
+    <clipPath id="globeClip">
+      <circle cx="80" cy="80" r="43"/>
+    </clipPath>
+    <clipPath id="innerGlobeClip">
+      <circle cx="80" cy="80" r="34"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="480" height="160" rx="16" fill="url(#skyGrad)"/>
+
+  <!-- Arc: flight path curve -->
+  <path d="M 24 110 Q 100 30 176 78" fill="none" stroke="url(#trailGrad)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>
+
+  <!-- Dashed border accent line -->
+  <rect x="1" y="1" width="478" height="158" rx="15" fill="none" stroke="#2DD4BF" stroke-width="0.5" stroke-opacity="0.2"/>
+
+  <!-- ICON AREA (left) -->
+  <circle cx="80" cy="80" r="46" fill="#0F2A4A" opacity="0.8"/>
+  <circle cx="80" cy="80" r="46" fill="none" stroke="url(#accentGrad)" stroke-width="1.2" opacity="0.6"/>
+
+  <!-- Globe arc lines -->
+  <g filter="url(#glow)" opacity="0.35">
+    <ellipse cx="80" cy="80" rx="34" ry="34" fill="none" stroke="#38BDF8" stroke-width="0.8"/>
+    <ellipse cx="80" cy="80" rx="20" ry="34" fill="none" stroke="#38BDF8" stroke-width="0.8"/>
+    <line x1="46" y1="80" x2="114" y2="80" stroke="#38BDF8" stroke-width="0.8"/>
+    <line x1="80" y1="46" x2="80" y2="114" stroke="#38BDF8" stroke-width="0.8"/>
+  </g>
+
+  <!-- Latitude lines clipped to inner globe -->
+  <g clip-path="url(#innerGlobeClip)" fill="none" stroke="#38BDF8" stroke-width="0.7" opacity="0.4">
+    <line x1="46" y1="52" x2="114" y2="52"/>
+    <line x1="46" y1="63" x2="114" y2="63"/>
+    <line x1="46" y1="74" x2="114" y2="74"/>
+    <line x1="46" y1="85" x2="114" y2="85"/>
+    <line x1="46" y1="96" x2="114" y2="96"/>
+    <line x1="46" y1="107" x2="114" y2="107"/>
+  </g>
+
+  <!-- Airplane icon -->
+  <g transform="translate(80,80) rotate(-38)" filter="url(#softGlow)">
+    <path d="M 21 0 Q 16 1.8 8 2 L -17 2 Q -21 1.5 -21 0 Q -21 -1.5 -17 -2 L 8 -2 Q 16 -1.8 21 0 Z" fill="url(#planeGrad)"/>
+    <path d="M 7 -2 L -5 -22 Q -7 -23 -9 -21 L -1 -2 Z" fill="url(#planeGrad)"/>
+    <path d="M 7  2 L -5  22 Q -7  23 -9  21 L -1  2 Z" fill="url(#planeGrad)"/>
+    <path d="M -14 -2 L -19 -9 Q -21 -10 -22 -8 L -17 -2 Z" fill="url(#planeGrad)" opacity="0.9"/>
+    <path d="M -14  2 L -19  9 Q -21  10 -22  8 L -17  2 Z" fill="url(#planeGrad)" opacity="0.9"/>
+  </g>
+
+  <!-- FLIGHT -->
+  <text x="144" y="86"
+    font-family="'Georgia', 'Times New Roman', serif"
+    font-size="42"
+    font-weight="700"
+    letter-spacing="-1"
+    fill="#F1F5F9">FLIGHT</text>
+
+  <!-- Accent underline gradient bar -->
+  <rect x="144" y="93" width="164" height="2.5" rx="1.5" fill="url(#accentGrad)" opacity="0.9"/>
+
+  <!-- SYNC -->
+  <text x="316" y="86"
+    font-family="'Georgia', 'Times New Roman', serif"
+    font-size="42"
+    font-weight="400"
+    letter-spacing="1"
+    fill="url(#accentGrad)">SYNC</text>
+
+  <!-- Tagline -->
+  <text x="145" y="116"
+    font-family="'Courier New', monospace"
+    font-size="11"
+    letter-spacing="3.5"
+    fill="#64748B">AIRSPACE · RESIDENCY · TAX</text>
+
+  <!-- Canada and Mexico flags -->
+  <text x="430" y="32" font-size="18">🇨🇦</text>
+  <text x="452" y="32" font-size="18">🇲🇽</text>
+</svg>
