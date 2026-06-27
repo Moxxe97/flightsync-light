@@ -34,18 +34,30 @@ function greatCircleIntermediate(lat1, lon1, lat2, lon2, f) {
   return [toDeg(φ), toDeg(λ)];
 }
 
-// Approximate distance flown over Canada along the great-circle route,
-// by walking in ~20 nm steps and testing midpoint membership in Canada.
-export function greatCircleCanadianDistance(lat1, lon1, lat2, lon2) {
+// Fraction (0..1) of the great-circle route between two points that lies over
+// Canada, by walking in ~20 nm steps and testing midpoint membership. Sampling
+// the whole arc — not just the endpoints — means a leg that enters AND exits
+// Canada (e.g. crosses the US then re-enters over the Maritimes), or one whose
+// endpoints are both Canadian but whose path bows into the US, is measured
+// correctly instead of being scored all-or-nothing.
+export function greatCircleCanadianFraction(lat1, lon1, lat2, lon2) {
   const total = haversineDistance(lat1, lon1, lat2, lon2);
   if (total === 0) return 0;
   const stepNm = 20;
   const steps = Math.max(1, Math.ceil(total / stepNm));
-  let canadian = 0;
+  let inSteps = 0;
   for (let i = 0; i < steps; i++) {
     const midF = (i + 0.5) / steps;
     const [lat, lon] = greatCircleIntermediate(lat1, lon1, lat2, lon2, midF);
-    if (isInCanada(lat, lon)) canadian += total / steps;
+    if (isInCanada(lat, lon)) inSteps++;
   }
-  return Math.round(canadian);
+  return inSteps / steps;
+}
+
+// Approximate distance flown over Canada along the great-circle route.
+export function greatCircleCanadianDistance(lat1, lon1, lat2, lon2) {
+  return Math.round(
+    haversineDistance(lat1, lon1, lat2, lon2) *
+      greatCircleCanadianFraction(lat1, lon1, lat2, lon2),
+  );
 }
