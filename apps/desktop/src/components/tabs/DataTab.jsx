@@ -11,6 +11,8 @@ export default function DataTab({
   notify,
   deviceId,
   readOnly = false,
+  onRescoreOfps,
+  rescoreBusy = null,
 }) {
   return (
     <div style={{ animation: "fadeIn 0.3s ease" }}>
@@ -22,6 +24,25 @@ export default function DataTab({
           <h3 style={{ fontSize: 14, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.04em" }}>
             VOLS ENREGISTRÉS ({flights.length})
           </h3>
+          {!readOnly && onRescoreOfps && ofpFlightIds.size > 0 && (
+            <button
+              onClick={onRescoreOfps}
+              disabled={!!rescoreBusy}
+              title="Recalculer les heures et distances canadiennes de chaque vol depuis son OFP stocké"
+              style={{
+                background: "none", border: "1px solid #1e3a5f", borderRadius: 6,
+                color: "#63b3ed", cursor: rescoreBusy ? "wait" : "pointer",
+                padding: "5px 10px", fontSize: 11, opacity: rescoreBusy ? 0.5 : 0.8,
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={e => { if (!rescoreBusy) e.currentTarget.style.opacity = 1; }}
+              onMouseLeave={e => { if (!rescoreBusy) e.currentTarget.style.opacity = 0.8; }}
+            >
+              {rescoreBusy
+                ? `Recalcul ${rescoreBusy.done}/${rescoreBusy.total}…`
+                : "↻ Recalculer (OFP)"}
+            </button>
+          )}
         </div>
 
         {flights.length === 0 ? (

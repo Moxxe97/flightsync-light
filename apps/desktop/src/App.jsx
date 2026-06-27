@@ -11,7 +11,7 @@ import ConfirmModal from './components/ConfirmModal';
 import BoardingPassModal from './components/BoardingPassModal';
 const OFPModal = lazy(() => import('./components/OFPModal'));
 import DayPanel from './components/DayPanel';
-import { getAllOFPFlightIds, getAllBoardingPassInfo, getArchiveYear } from '@flightsync/core/idb';
+import { getAllOFPFlightIds, getAllBoardingPassInfo, getArchiveYear, getOFP } from '@flightsync/core/idb';
 import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives } from './utils/archiveStore';
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
 import { parseBackupJson, sanitizeStoredRows } from './utils/importValidation';
@@ -24,6 +24,8 @@ import MobileHomeMenu from './components/MobileHomeMenu';
 import MobileSectionHeader from './components/MobileSectionHeader';
 import { now, formatDate, timeSince } from '@flightsync/core/util';
 import { mergeImportedFlights } from '@flightsync/core/parsing/merge-flights';
+import { processPdfFile } from '@flightsync/core/parsing';
+import { rescoreAllFromOfps } from './utils/rescoreOfps';
 import HistoryTab from './components/tabs/HistoryTab';
 import ArchiveTab from './components/tabs/ArchiveTab';
 import DataTab from './components/tabs/DataTab';
@@ -110,6 +112,8 @@ export default function FlightSyncSystem() {
   const [dayPanelDate, setDayPanelDate] = useState(null); // date string or null
   const [viewingPass, setViewingPass] = useState(null);
   const [ofpFlightIds, setOfpFlightIds] = useState(new Set());
+  const [rescoreConfirm, setRescoreConfirm] = useState(false);
+  const [rescoreBusy, setRescoreBusy] = useState(null); // null | { done, total }
   const [ofpModalFlightId, setOfpModalFlightId] = useState(null);
   const [archiveYears, setArchiveYears] = useState([]); // [{ year, flights, residence }] newest first
   const [migrationDone, setMigrationDone] = useState(false); // gate auto-archive until the ls→idb migration completes
@@ -867,6 +871,37 @@ export default function FlightSyncSystem() {
     refreshOFPIds();
   }, [flights, deviceId, notify, refreshOFPIds]);
 
+  // ─── RE-SCORE FROM STORED OFPs ───────────────────────
+  // Re-parse every flight's stored OFP and refresh its geo-derived tax fields
+  // (canadianDistance/canadianTime) — used after a geo-model change (e.g. the
+  // per-leg scoring fix) so existing flights are corrected without re-dropping
+  // each PDF. Local-only: no cloud fallback, no sync.
+  const handleRescoreOfps = useCallback(async () => {
+    setRescoreConfirm(false);
+    setRescoreBusy({ done: 0, total: 0 });
+    try {
+      const getRecord = (id) => getOFP(id);
+      const parsePdf = (bytes) => processPdfFile(new Blob([bytes], { type: 'application/pdf' }));
+      const { updates, stats } = await rescoreAllFromOfps({
+        flights, ofpFlightIds, getRecord, parsePdf,
+        onProgress: (done, total) => setRescoreBusy({ done, total }),
+      });
+      if (updates.length > 0) {
+        const { flights: allFlights } = mergeImportedFlights(flights, updates, { timestamp: now(), deviceId });
+        await storage.set(STORAGE_KEYS.FLIGHTS, JSON.stringify(allFlights));
+        setFlights(allFlights);
+      }
+      const parts = [`${stats.updated} vol(s) recalculé(s)`, `${stats.unchanged} inchangé(s)`];
+      if (stats.noOfp) parts.push(`${stats.noOfp} sans OFP stocké`);
+      if (stats.failed) parts.push(`${stats.failed} échec(s)`);
+      notify('Recalcul terminé : ' + parts.join(', '), stats.failed ? 'info' : 'success');
+    } catch (err) {
+      notify('Recalcul échoué : ' + (err?.message || 'erreur inconnue'), 'error');
+    } finally {
+      setRescoreBusy(null);
+    }
+  }, [flights, ofpFlightIds, deviceId, notify]);
+
   // ─── COMPUTED VALUES ─────────────────────────────────
   const currentYear = new Date().getFullYear();
   // Read-only "view a past year": swap the dataset fed to the data tabs.
@@ -987,6 +1022,8 @@ export default function FlightSyncSystem() {
           notify={notify}
           deviceId={deviceId}
           readOnly={isArchiveView}
+          onRescoreOfps={() => setRescoreConfirm(true)}
+          rescoreBusy={rescoreBusy}
         />
       )}
 
@@ -1340,6 +1377,16 @@ export default function FlightSyncSystem() {
         danger
         onConfirm={() => { setClearAllConfirm(false); performClearAllData(); }}
         onCancel={() => setClearAllConfirm(false)}
+      />
+
+      <ConfirmModal
+        open={rescoreConfirm}
+        title="Recalculer depuis les OFP stockés ?"
+        message="Les heures et distances canadiennes de chaque vol ayant un OFP stocké seront recalculées avec la frontière corrigée. Les vols modifiés à la main gardent leurs heures totales et leurs notes."
+        confirmLabel="Recalculer"
+        cancelLabel="Annuler"
+        onConfirm={handleRescoreOfps}
+        onCancel={() => setRescoreConfirm(false)}
       />
     </div>
   );
