@@ -16,11 +16,24 @@ export const CANADIAN_IATA = new Set([
 // wrongly excluded St. John's/Cape Dyer while including NW Greenland.
 export const CANADA_POLY = [
   [-53.85, 46.55], [-53.5,  46.8], [-59.5,  46.0], [-60.5,  45.9],
-  [-66.0,  44.0], [-67.0,  45.3], [-67.8,  47.1], [-69.2,  47.3],
+  // southern Nova Scotia: Atlantic coast + 12 nm — Cape Breton → Halifax →
+  // Cape Sable → Yarmouth → SW New Brunswick (replaces the old straight chord
+  // that cut across NS and scored Halifax/Yarmouth/Cape Sable OUT)
+  [-60.0,  45.3], [-61.0,  44.9], [-62.2,  44.5], [-63.5,  44.2],
+  [-64.4,  43.9], [-65.2,  43.5], [-65.9,  43.15], [-66.5,  43.6], [-66.9,  44.6],
+  [-67.0,  45.3], [-67.8,  47.1], [-69.2,  47.3],
   [-71.5,  45.0], [-74.7,  45.0], [-76.0,  44.0], [-79.2,  43.0],
   [-83.0,  41.7], [-83.5,  42.0], [-83.6,  46.0], [-84.5,  46.5],
-  [-89.0,  48.0], [-95.2,  49.0], [-123.3, 49.0], [-124.7, 48.4],
-  [-126.0, 50.5], [-130.0, 54.7], [-135.0, 59.0], [-141.0, 60.0],
+  [-89.0,  48.0], [-95.2,  49.0], [-123.3, 49.0],
+  // BC / Pacific coast: coast + 12 nm — through Haro Strait / Juan de Fuca
+  // (keeping the US San Juan Is + Cape Flattery out), up the west coast of
+  // Vancouver Island, around Haida Gwaii (~100 nm offshore), back across Dixon
+  // Entrance to Prince Rupert (replaces the old chord that ran inland of the coast)
+  [-123.15, 48.65], [-123.30, 48.20], [-124.5,  48.42], [-125.2,  48.55],
+  [-126.2,  49.05], [-127.4,  49.85], [-128.7,  50.75], [-130.0,  51.6],
+  [-131.6,  51.85], [-133.3,  52.9], [-133.6,  53.7], [-133.3,  54.25],
+  [-131.2,  54.45], [-130.6,  54.6],
+  [-135.0, 59.0], [-141.0, 60.0],
   [-141.0, 84.0], [-60.0,  84.0],
   // eastern seaboard, north → south (coast + 12 nm)
   [-59.95, 82.47], [-63.43, 81.49], [-68.20, 80.42], [-72.19, 79.52],
