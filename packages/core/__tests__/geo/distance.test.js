@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { greatCircleCanadianDistance, haversineDistance } from '../../src/geo/distance.js';
+import { greatCircleCanadianDistance, greatCircleCanadianFraction, haversineDistance } from '../../src/geo/distance.js';
 
 const YUL = { lat: 45.4706, lon: -73.7408 };
 const PUJ = { lat: 18.5675, lon: -68.3634 };
@@ -45,5 +45,19 @@ describe('greatCircleCanadianDistance', () => {
   it('returns 0 for LHR→CDG (no Canadian segment)', () => {
     const canadian = greatCircleCanadianDistance(51.47, -0.45, 49.00, 2.55);
     expect(canadian).toBe(0);
+  });
+});
+
+describe('greatCircleCanadianFraction', () => {
+  it('is ~1 for an all-Canada great circle (YUL→YVR)', () => {
+    expect(greatCircleCanadianFraction(45.47, -73.74, 49.19, -123.18)).toBeGreaterThan(0.95);
+  });
+  it('is 0 for a leg entirely outside Canada (CDG→LYS)', () => {
+    expect(greatCircleCanadianFraction(49.00, 2.55, 45.73, 5.08)).toBe(0);
+  });
+  it('measures a partial leg whose path dips into the US between two Canadian endpoints (YYZ→YWG ≈ half over Lake Superior / US)', () => {
+    const f = greatCircleCanadianFraction(43.68, -79.62, 49.91, -97.24);
+    expect(f).toBeGreaterThan(0.3);
+    expect(f).toBeLessThan(0.7);
   });
 });
