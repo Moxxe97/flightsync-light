@@ -1,5 +1,5 @@
 import { pdfToText } from './pdf-text.js';
-import { CANADIAN_IATA, greatCircleCanadianFraction } from '../geo/index.js';
+import { CANADIAN_IATA, greatCircleCanadianFraction, haversineDistance } from '../geo/index.js';
 
 // ─── Constants ────────────────────────────────────────────────
 const ICAO_TO_IATA = {
@@ -126,6 +126,25 @@ function parseWaypointsFromOFP(text) {
     }
   }
 
+  // Self-heal mis-captured segment distances. The DIS column is parsed as the
+  // first integer after the longitude; if pdfjs emits FL/temp/wind before it,
+  // that integer is wrong and silently inflates the Canadian distance. Adjacent
+  // plotting points are ~straight, so a leg's true length ≈ the great-circle
+  // distance between consecutive fixes — replace any dist that falls outside a
+  // generous band around it (heal at the source so both the per-leg scoring and
+  // the waypoint-sum denominator use the corrected value).
+  let distCorrected = 0;
+  for (let i = 0; i + 1 < waypoints.length; i++) {
+    const gc = haversineDistance(
+      waypoints[i].lat, waypoints[i].lon, waypoints[i + 1].lat, waypoints[i + 1].lon,
+    );
+    if (gc > 0 && (waypoints[i].dist > gc * 1.3 + 10 || waypoints[i].dist < gc * 0.6)) {
+      waypoints[i].dist = Math.round(gc);
+      distCorrected++;
+    }
+  }
+  waypoints.distCorrected = distCorrected;
+
   return waypoints;
 }
 
@@ -246,6 +265,9 @@ export function parseOfp(text) {
         : totalTime;
     }
     calcMethod = `waypoints (${waypoints.length} fixes)`;
+    if (waypoints.distCorrected > 0) {
+      calcMethod += `, ${waypoints.distCorrected} dist-corrected`;
+    }
   } else if (bothCanadian) {
     canadianDistance = gcDist || 880;
     canadianTime = totalTime;
