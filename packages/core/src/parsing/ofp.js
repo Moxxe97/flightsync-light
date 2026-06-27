@@ -1,5 +1,5 @@
 import { pdfToText } from './pdf-text.js';
-import { CANADIAN_IATA, isInCanada } from '../geo/index.js';
+import { CANADIAN_IATA, greatCircleCanadianFraction } from '../geo/index.js';
 
 // ─── Constants ────────────────────────────────────────────────
 const ICAO_TO_IATA = {
@@ -130,34 +130,18 @@ function parseWaypointsFromOFP(text) {
 }
 
 // ─── Canadian Distance from Waypoints ─────────────────────────
-// For each segment A→B, sums the portion of the segment within Canadian airspace.
-// Cross-border segments are interpolated at 20 steps for accuracy.
-function calcCanadianFromWaypoints(waypoints) {
+// For each leg A→B, adds the portion flown over Canada. The whole great circle
+// of EVERY leg is sampled (not just its two endpoints), so a leg that leaves
+// Canada via the US and re-enters over the Maritimes, or one whose endpoints
+// are both Canadian but whose path bows into the US, is measured correctly
+// instead of being scored all-or-nothing.
+export function calcCanadianFromWaypoints(waypoints) {
   let canadianDist = 0;
   for (let i = 0; i + 1 < waypoints.length; i++) {
     const a = waypoints[i];
     const b = waypoints[i + 1];
-    const segDist = a.dist;
-    if (segDist === 0) continue;
-
-    const aIn = isInCanada(a.lat, a.lon);
-    const bIn = isInCanada(b.lat, b.lon);
-
-    if (aIn && bIn) {
-      canadianDist += segDist;
-    } else if (aIn || bIn) {
-      // Cross-border segment: interpolate at 20 steps
-      let stepsInCanada = 0;
-      const STEPS = 20;
-      for (let k = 0; k <= STEPS; k++) {
-        const t = k / STEPS;
-        const lat = a.lat + t * (b.lat - a.lat);
-        const lon = a.lon + t * (b.lon - a.lon);
-        if (isInCanada(lat, lon)) stepsInCanada++;
-      }
-      canadianDist += segDist * (stepsInCanada / (STEPS + 1));
-    }
-    // else: both outside, 0 contribution
+    if (a.dist === 0) continue;
+    canadianDist += a.dist * greatCircleCanadianFraction(a.lat, a.lon, b.lat, b.lon);
   }
   return Math.round(canadianDist);
 }
