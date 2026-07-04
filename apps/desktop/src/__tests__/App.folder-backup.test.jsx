@@ -46,9 +46,14 @@ vi.mock('../utils/driveBackup', () => ({
 // ─── The folder backup seams we assert on ───
 const runFolderBackupMock = vi.fn(async () => ({ ofps: 0, boardingPasses: 0 }));
 const restoreFolderBlobsMock = vi.fn(async () => ({ ofps: 0, boardingPasses: 0 }));
+// ensureFolderAccess (H1: runtime fs scope grant) — a no-op stub here; the
+// real ACL grant is only meaningful against a live Tauri backend, and is
+// covered by folderBackup.test.js + the controller's build smoke.
+const ensureFolderAccessMock = vi.fn(async () => {});
 vi.mock('../utils/folderBackup', () => ({
   runFolderBackup: (...args) => runFolderBackupMock(...args),
   restoreFolderBlobs: (...args) => restoreFolderBlobsMock(...args),
+  ensureFolderAccess: (...args) => ensureFolderAccessMock(...args),
 }));
 
 // ─── @tauri-apps/plugin-fs: provide readTextFile for the restore test ───
@@ -140,6 +145,7 @@ describe('App debounced folder auto-backup', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     runFolderBackupMock.mockClear();
     restoreFolderBlobsMock.mockClear();
+    ensureFolderAccessMock.mockClear();
     readTextFileMock.mockClear();
     window.localStorage.clear();
   });
@@ -197,6 +203,7 @@ describe('App restore from folder', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     runFolderBackupMock.mockClear();
     restoreFolderBlobsMock.mockClear();
+    ensureFolderAccessMock.mockClear();
     readTextFileMock.mockClear();
     window.localStorage.clear();
   });
@@ -236,5 +243,83 @@ describe('App restore from folder', () => {
 
     // JOURS RÉSIDENCE label should show 0.
     expect(screen.getByText('0')).toBeTruthy();
+
+    // H1 review gap: the runtime fs scope grant must actually be requested
+    // for this folder, and requested BEFORE the gated fs read — otherwise
+    // the read could run against a folder the plugin was never allowed to
+    // touch.
+    expect(ensureFolderAccessMock).toHaveBeenCalledWith('/Users/x/FlightSync');
+    const grantOrder = ensureFolderAccessMock.mock.invocationCallOrder[0];
+    const readOrder = readTextFileMock.mock.invocationCallOrder[0];
+    expect(grantOrder).toBeLessThan(readOrder);
+  });
+});
+
+describe('App choose backup folder', () => {
+  // The folder picker goes through window.__TAURI_INTERNALS__.invoke
+  // ('plugin:dialog|open'); jsdom has no such global, so stub it per-test
+  // the way App.jsx expects (see chooseBackupFolder / the title-bar drag
+  // handler for the same optional-chaining pattern).
+  const dialogInvokeMock = vi.fn(async () => '/Users/x/NewFolder');
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    runFolderBackupMock.mockClear();
+    restoreFolderBlobsMock.mockClear();
+    ensureFolderAccessMock.mockClear();
+    readTextFileMock.mockClear();
+    dialogInvokeMock.mockClear();
+    dialogInvokeMock.mockImplementation(async () => '/Users/x/NewFolder');
+    window.localStorage.clear();
+    window.__TAURI_INTERNALS__ = { invoke: (...args) => dialogInvokeMock(...args) };
+  });
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    cleanup();
+    delete window.__TAURI_INTERNALS__;
+  });
+
+  it('picking a folder grants fs access for it and saves it to settings', async () => {
+    await renderApp();
+
+    const backupTabBtn = screen.getByRole('button', { name: /Backup|Sauvegardes/i });
+    await act(async () => { fireEvent.click(backupTabBtn); });
+
+    const pickBtn = await screen.findByRole('button', { name: /Choisir un dossier/i });
+    await act(async () => {
+      fireEvent.click(pickBtn);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(ensureFolderAccessMock).toHaveBeenCalledWith('/Users/x/NewFolder');
+    await screen.findByText('Dossier de sauvegarde configuré');
+    expect(JSON.parse(window.localStorage.getItem('ac-sync-settings')).backupFolder).toBe('/Users/x/NewFolder');
+  });
+
+  it('grant failure surfaces an error and does not persist the folder', async () => {
+    ensureFolderAccessMock.mockRejectedValueOnce(new Error('Permission refusée'));
+
+    await renderApp();
+
+    const backupTabBtn = screen.getByRole('button', { name: /Backup|Sauvegardes/i });
+    await act(async () => { fireEvent.click(backupTabBtn); });
+
+    const pickBtn = await screen.findByRole('button', { name: /Choisir un dossier/i });
+    await act(async () => {
+      fireEvent.click(pickBtn);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(ensureFolderAccessMock).toHaveBeenCalledWith('/Users/x/NewFolder');
+    await screen.findByText("Impossible d'autoriser l'accès au dossier : Permission refusée");
+
+    // The folder must NOT have been saved: no backupFolder in settings, and
+    // the picker button ("no folder configured" state) is still shown.
+    const storedSettings = window.localStorage.getItem('ac-sync-settings');
+    expect(storedSettings ? JSON.parse(storedSettings).backupFolder : undefined).toBeFalsy();
+    expect(screen.getByRole('button', { name: /Choisir un dossier/i })).toBeTruthy();
   });
 });

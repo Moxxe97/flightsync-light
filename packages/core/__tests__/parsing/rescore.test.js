@@ -84,4 +84,18 @@ describe('rescoreFlight', () => {
     // 6.5 × (816 / 2626) = 2.02
     expect(flight.canadianTime).toBeCloseTo(2.02, 2);
   });
+
+  // H5: a near-antipodal-waypoint geo bug can make the re-parse carry NaN in
+  // canadianDistance/canadianTime. A routine re-score must never overwrite
+  // the flight's previously-good stored values with NaN, and must never
+  // report `changed: true` purely because `NaN !== x` is always true.
+  it('never overwrites good stored values with a non-finite re-parsed value, and does not report a spurious change', () => {
+    const corrupted = { ...reparsed, canadianDistance: NaN, canadianTime: NaN };
+    const { flight, changed } = rescoreFlight(stored, [corrupted]);
+    expect(Number.isFinite(flight.canadianDistance)).toBe(true);
+    expect(Number.isFinite(flight.canadianTime)).toBe(true);
+    expect(flight.canadianDistance).toBe(stored.canadianDistance);
+    expect(flight.canadianTime).toBe(stored.canadianTime);
+    expect(changed).toBe(false);
+  });
 });
