@@ -6,12 +6,55 @@ function isPlainObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+// M9 hardening: the original validators checked field TYPES only
+// (`typeof f.date === 'string'`), never CONTENT. That was the direct enabler
+// of the ICS-injection vuln — a `date` with an embedded CRLF was a valid
+// string and sailed through, then landed unescaped in DTSTART/DTEND
+// (see icsExport.js). Every string field that can later be persisted/exported
+// now gets a content check: exact date format, and no control characters.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_FLIGHT_NUMBER_LEN = 16; // real formats top out around 8 chars (e.g. "ABC1234A"); generous margin
+const MAX_LOCATION_LEN = 32;
+const MAX_NOTES_LEN = 4000;
+
+// C0 controls + DEL. `\t`/`\n`/`\r` are carved out when `allowNewlines` is set
+// because free-text `notes` come from a real multi-line <textarea> (DayPanel)
+// and are safely escaped at every export site (icsEscape turns CR/LF into a
+// literal "\n"; csvEscape quotes the field) — rejecting them here would just
+// break legitimate saved notes on the next backup restore. Fields that should
+// never contain a line break (date, flightNumber, location) get the strict form.
+const CONTROL_CHARS_RE = /[\x00-\x1F\x7F]/;
+const CONTROL_CHARS_NO_NEWLINE_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+
+function hasControlChars(s, { allowNewlines = false } = {}) {
+  return (allowNewlines ? CONTROL_CHARS_NO_NEWLINE_RE : CONTROL_CHARS_RE).test(s);
+}
+
+// String must be the right type, within bounds, and free of control
+// characters (Tab/CR/LF optionally excused — see above).
+function isCleanString(s, maxLen, opts) {
+  return typeof s === 'string' && s.length <= maxLen && !hasControlChars(s, opts);
+}
+
 export function isValidFlight(f) {
-  return isPlainObject(f) && typeof f.date === 'string' && typeof f.flightNumber === 'string';
+  if (!isPlainObject(f)) return false;
+  if (typeof f.date !== 'string' || !DATE_RE.test(f.date)) return false;
+  if (!isCleanString(f.flightNumber, MAX_FLIGHT_NUMBER_LEN)) return false;
+  if (f.notes != null && !isCleanString(f.notes, MAX_NOTES_LEN, { allowNewlines: true })) return false;
+  return true;
 }
 
 export function isValidResidenceDay(r) {
-  return isPlainObject(r) && typeof r.date === 'string';
+  if (!isPlainObject(r)) return false;
+  if (typeof r.date !== 'string' || !DATE_RE.test(r.date)) return false;
+  // Known buckets: canada/mexico/international/transit, or null (note-only
+  // untracked day — see residence.js). Any OTHER non-null value is still
+  // accepted as long as it's a clean, bounded string: tallyResidence()
+  // deliberately buckets unknown locations into `other` for forward
+  // compatibility, so this stays a content/safety check, not a business enum.
+  if (r.location != null && !isCleanString(r.location, MAX_LOCATION_LEN)) return false;
+  if (r.notes != null && !isCleanString(r.notes, MAX_NOTES_LEN, { allowNewlines: true })) return false;
+  return true;
 }
 
 // Boot-time guard: never let a persisted non-array (or junk rows) reach React
