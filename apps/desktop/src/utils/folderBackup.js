@@ -25,14 +25,42 @@ async function ensureDirs(folder) {
 
 // `lstat` (unlike `exists`/`readFile`/`writeFile`) does NOT follow the final
 // symlink, so it reliably flags both live and dangling symlinks planted at a
-// path we're about to read from or write to. Treat "not found" as false —
-// a missing path is not (yet) a symlink.
+// path we're about to read from or write to.
+//
+// A genuine "path does not exist" is the ONLY lstat failure treated as safe
+// (not a symlink — there's nothing there yet to follow). Any OTHER failure —
+// most notably a Tauri ACL denial if `fs:allow-lstat` were ever missing or
+// mis-scoped — must NOT be treated the same as "not found". Silently
+// swallowing an unexpected error and reporting "not a symlink" would make the
+// guard inert (this was H2's runtime defect). So we fail closed: rethrow
+// anything that isn't recognizably a not-found error, and let callers decide
+// how to react (abort the write vs. skip the affected file/category).
+const NOT_FOUND_PATTERNS = ['no such file', 'os error 2', 'cannot find', 'not found', 'notfound'];
+
+function isNotFoundError(err) {
+  const msg = String(err?.message ?? err ?? '').toLowerCase();
+  return NOT_FOUND_PATTERNS.some((p) => msg.includes(p));
+}
+
 async function lstatSymlink(path) {
   try {
     const info = await lstat(path);
     return !!info?.isSymlink;
+  } catch (e) {
+    if (isNotFoundError(e)) return false; // safe: nothing there (yet)
+    throw e; // fail closed: unrecognized error (e.g. ACL denial) — do NOT treat as safe
+  }
+}
+
+// Same check, but for call sites where the safe reaction to an unexpected
+// lstat failure is "treat this file/category as unsafe and skip it" rather
+// than letting the exception blow up the whole backup/restore run. A real
+// not-found still resolves to `false` (safe — write/read proceeds normally).
+async function isUnsafePath(path) {
+  try {
+    return await lstatSymlink(path);
   } catch {
-    return false;
+    return true; // fail closed: unknown lstat error → treat as symlink/unsafe
   }
 }
 
@@ -54,10 +82,10 @@ export async function runFolderBackup({ folder, flights, residence, settings }) 
 
   let ofps = 0;
   const ofpsDir = `${folder}/ofps`;
-  if (!(await lstatSymlink(ofpsDir))) { // dir itself redirected — skip whole category
+  if (!(await isUnsafePath(ofpsDir))) { // dir itself redirected (or lstat unusable) — skip whole category
     for (const flightId of await getAllOFPFlightIds()) {
       const path = `${ofpsDir}/${ofpFileName(flightId)}`;
-      if (await lstatSymlink(path)) continue; // planted symlink: never write through it
+      if (await isUnsafePath(path)) continue; // planted symlink (or unknown lstat error): never write through it
       if (await exists(path)) continue; // immutable: written once
       const bytes = await getOFPBytes(flightId);
       if (!bytes) continue;
@@ -70,7 +98,7 @@ export async function runFolderBackup({ folder, flights, residence, settings }) 
   const bpDir = `${folder}/boarding-passes`;
   // Per-date iteration keeps the index `n` in bpFileName STABLE across runs —
   // same semantics as driveBackup.js backupBlobs (0-based per-date counter).
-  if (!(await lstatSymlink(bpDir))) { // dir itself redirected — skip whole category
+  if (!(await isUnsafePath(bpDir))) { // dir itself redirected (or lstat unusable) — skip whole category
     for (const date of await getAllBoardingPassDates()) {
       const passes = await getBoardingPassesForDate(date);
       for (let n = 0; n < passes.length; n++) {
@@ -78,7 +106,7 @@ export async function runFolderBackup({ folder, flights, residence, settings }) 
         if (!bp?.data) continue;
         const mime = bp.fileType || 'application/pdf';
         const path = `${bpDir}/${bpFileName(date, n, extFromMime(mime))}`;
-        if (await lstatSymlink(path)) continue; // planted symlink: never write through it
+        if (await isUnsafePath(path)) continue; // planted symlink (or unknown lstat error): never write through it
         if (await exists(path)) continue;
         await writeFile(path, new Uint8Array(bp.data));
         boardingPasses++;
@@ -94,7 +122,7 @@ export async function runFolderBackup({ folder, flights, residence, settings }) 
 export async function restoreFolderBlobs(folder, flights) {
   let ofps = 0;
   const ofpsDir = `${folder}/ofps`;
-  if ((await exists(ofpsDir)) && !(await lstatSymlink(ofpsDir))) {
+  if ((await exists(ofpsDir)) && !(await isUnsafePath(ofpsDir))) {
     const byId = new Map((flights || []).map((f) => [String(f.id), f]));
     for (const e of await readDir(ofpsDir)) {
       if (e.isSymlink) continue; // planted symlink entry — never read through it
@@ -114,7 +142,7 @@ export async function restoreFolderBlobs(folder, flights) {
 
   let boardingPasses = 0;
   const bpDir = `${folder}/boarding-passes`;
-  if ((await exists(bpDir)) && !(await lstatSymlink(bpDir))) {
+  if ((await exists(bpDir)) && !(await isUnsafePath(bpDir))) {
     // Dedup guard: match by fileName within the date, same as driveBackup.restoreBlobs.
     const existingByDate = new Map();
     for (const e of await readDir(bpDir)) {
