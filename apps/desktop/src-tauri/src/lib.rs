@@ -83,6 +83,14 @@ fn parse_callback_query(query: &str) -> CallbackResult {
     result
 }
 
+/// A real Google redirect carries either an authorization `code` or an
+/// `error`. A request that matches the callback path but has neither (a local
+/// probe like `/?x=1`) must NOT consume the one-shot handshake slot (audit
+/// M5).
+fn is_terminal_callback(result: &CallbackResult) -> bool {
+    !result.code.is_empty() || !result.error.is_empty()
+}
+
 /// Read just the request line from a stream, bounded in both bytes (R2) and
 /// time (R3). Returns the raw request line (may retain trailing CRLF).
 fn read_request_line(stream: &TcpStream) -> String {
@@ -179,6 +187,17 @@ fn start_oauth_listener(app: tauri::AppHandle) -> Result<u16, String> {
                 .map(|(_, q)| q)
                 .unwrap_or_default();
             let result = parse_callback_query(query);
+
+            if !is_terminal_callback(&result) {
+                // Not the real redirect (no code/error) — 404 and keep waiting so a
+                // local probe can't consume the handshake slot (audit M5).
+                let _ = stream.write_all(
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+                finish_response(&stream);
+                drop(stream);
+                continue;
+            }
 
             // Serve a final page so the auth window shows a friendly message
             // instead of a blank 200 with no body.
@@ -355,7 +374,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_allowed_auth_url, is_callback_path, parse_callback_query, request_target,
+        is_allowed_auth_url, is_callback_path, is_terminal_callback, parse_callback_query,
+        request_target,
     };
 
     #[test]
@@ -444,5 +464,25 @@ mod tests {
         assert_eq!(r.code, "a+b/c=d e");
         assert_eq!(r.state, "s");
         assert!(r.error.is_empty());
+    }
+
+    #[test]
+    fn is_terminal_callback_true_for_code_or_error() {
+        let with_code = parse_callback_query("code=abc&state=s");
+        assert!(is_terminal_callback(&with_code));
+
+        let with_error = parse_callback_query("error=access_denied");
+        assert!(is_terminal_callback(&with_error));
+    }
+
+    #[test]
+    fn is_terminal_callback_false_for_probe_and_empty_query() {
+        // A probe like `/?x=1` passes is_callback_path (non-empty query on `/`)
+        // but carries neither code nor error — must not be treated as terminal.
+        let probe = parse_callback_query("x=1");
+        assert!(!is_terminal_callback(&probe));
+
+        let empty = parse_callback_query("");
+        assert!(!is_terminal_callback(&empty));
     }
 }
