@@ -16,8 +16,8 @@ export function rescoreFlight(flight, parsedFlights) {
   if (!match) return null;
 
   const totalTime = flight.totalTime > 0 ? flight.totalTime : match.totalTime;
-  const distance = match.distance > 0 ? match.distance : flight.distance;
-  const canadianDistance = match.canadianDistance;
+  let distance = match.distance > 0 ? match.distance : flight.distance;
+  let canadianDistance = match.canadianDistance;
 
   // Canadian ratio as parseOfp computed it (it already handled the G/C vs
   // waypoint-sum denominator); fall back to the distance ratio if the OFP had
@@ -25,9 +25,17 @@ export function rescoreFlight(flight, parsedFlights) {
   const ratio = match.totalTime > 0
     ? match.canadianTime / match.totalTime
     : (distance > 0 ? canadianDistance / distance : null);
-  const canadianTime = ratio != null
+  let canadianTime = ratio != null
     ? parseFloat((totalTime * ratio).toFixed(2))
     : match.canadianTime;
+
+  // Defense-in-depth (H5): a geo edge case (e.g. near-antipodal waypoints)
+  // can yield a non-finite computed value. Never let that overwrite a
+  // previously-good stored value, and never report a spurious `changed`
+  // caused by a NaN comparison (NaN !== x is always true).
+  if (!Number.isFinite(distance)) distance = flight.distance;
+  if (!Number.isFinite(canadianDistance)) canadianDistance = flight.canadianDistance;
+  if (!Number.isFinite(canadianTime)) canadianTime = flight.canadianTime;
 
   const keepNotes = flight.notes && !flight.notes.startsWith(AUTO_NOTES_PREFIX);
   const notes = keepNotes ? flight.notes : (match.notes ?? flight.notes);

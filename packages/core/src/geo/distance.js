@@ -10,7 +10,10 @@ export function haversineDistance(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat / 2) ** 2 +
             Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
             Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_NM * Math.asin(Math.sqrt(a));
+  // Clamp: for near-antipodal pairs, floating-point error can push `a`
+  // fractionally above 1, making Math.sqrt(a) > 1 and Math.asin(...) return
+  // NaN. Clamping to 1 caps the result at the true antipodal distance.
+  return 2 * EARTH_RADIUS_NM * Math.asin(Math.sqrt(Math.min(1, a)));
 }
 
 // Intermediate point along a great circle, fraction f ∈ [0,1].
@@ -19,10 +22,10 @@ function greatCircleIntermediate(lat1, lon1, lat2, lon2, f) {
   const toDeg = r => r * 180 / Math.PI;
   const φ1 = toRad(lat1), φ2 = toRad(lat2);
   const λ1 = toRad(lon1), λ2 = toRad(lon2);
-  const d = 2 * Math.asin(Math.sqrt(
+  const d = 2 * Math.asin(Math.sqrt(Math.min(1,
     Math.sin((φ2 - φ1) / 2) ** 2 +
     Math.cos(φ1) * Math.cos(φ2) * Math.sin((λ2 - λ1) / 2) ** 2
-  ));
+  )));
   if (d === 0) return [lat1, lon1];
   const A = Math.sin((1 - f) * d) / Math.sin(d);
   const B = Math.sin(f * d) / Math.sin(d);
@@ -42,7 +45,9 @@ function greatCircleIntermediate(lat1, lon1, lat2, lon2, f) {
 // correctly instead of being scored all-or-nothing.
 export function greatCircleCanadianFraction(lat1, lon1, lat2, lon2) {
   const total = haversineDistance(lat1, lon1, lat2, lon2);
-  if (total === 0) return 0;
+  // Defense-in-depth: never propagate a non-finite distance (e.g. from
+  // malformed/NaN input coordinates) into the fraction calculation.
+  if (!Number.isFinite(total) || total === 0) return 0;
   const stepNm = 20;
   const steps = Math.max(1, Math.ceil(total / stepNm));
   let inSteps = 0;
@@ -56,8 +61,8 @@ export function greatCircleCanadianFraction(lat1, lon1, lat2, lon2) {
 
 // Approximate distance flown over Canada along the great-circle route.
 export function greatCircleCanadianDistance(lat1, lon1, lat2, lon2) {
-  return Math.round(
-    haversineDistance(lat1, lon1, lat2, lon2) *
-      greatCircleCanadianFraction(lat1, lon1, lat2, lon2),
-  );
+  const total = haversineDistance(lat1, lon1, lat2, lon2);
+  // Defense-in-depth: never propagate a non-finite distance into the result.
+  if (!Number.isFinite(total)) return 0;
+  return Math.round(total * greatCircleCanadianFraction(lat1, lon1, lat2, lon2));
 }
