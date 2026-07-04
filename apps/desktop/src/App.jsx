@@ -14,7 +14,7 @@ import DayPanel from './components/DayPanel';
 import { getAllOFPFlightIds, getAllBoardingPassInfo, getArchiveYear, getOFP } from '@flightsync/core/idb';
 import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives } from './utils/archiveStore';
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
-import { parseBackupJson, sanitizeStoredRows } from './utils/importValidation';
+import { parseBackupJson, sanitizeStoredRows, isValidFlight } from './utils/importValidation';
 import { csvEscape } from './utils/exportEscape';
 import Icons from './components/Icons';
 import { SECTIONS } from './navigation/sections';
@@ -741,6 +741,17 @@ export default function FlightSyncSystem() {
 
           if (parsedFlights.length === 0) {
             notify("Aucun vol trouvé dans le CSV", "error");
+            return;
+          }
+
+          // M9: this branch used to build flight objects and preview them
+          // without ever running them through isValidFlight, so a Date cell
+          // carrying control characters (the same shape that enabled the
+          // fixed ICS-injection vuln) sailed straight into state. Mirror the
+          // JSON import path (parseBackupJson) and reject the whole import
+          // rather than silently dropping or accepting malformed rows.
+          if (!parsedFlights.every(isValidFlight)) {
+            notify("Import invalide — certains vols sont mal formés", "error");
             return;
           }
 
