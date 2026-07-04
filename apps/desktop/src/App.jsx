@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } fro
 import './App.css';
 import { exportICS } from './utils/icsExport';
 import { runBackup, findBackup, downloadBackup, restoreBlobs, BACKUP_FILENAME } from './utils/driveBackup';
-import { runFolderBackup, restoreFolderBlobs } from './utils/folderBackup';
+import { runFolderBackup, restoreFolderBlobs, ensureFolderAccess } from './utils/folderBackup';
 import { tallyResidence } from './utils/residence';
 import { selectDisplayData, archiveYearList, adjacentYear } from './utils/archiveView';
 import { getAllBoardingPassDates } from '@flightsync/core/idb';
@@ -515,6 +515,10 @@ export default function FlightSyncSystem() {
       options: { directory: true, title: 'Choisir le dossier de sauvegarde' },
     });
     if (typeof folder === 'string' && folder) {
+      // Grant the fs plugin's runtime scope access to exactly this folder
+      // (audit H1 — no static fs:scope-* is granted any more) before it's
+      // saved/used anywhere else.
+      await ensureFolderAccess(folder);
       const newSettings = { ...settings, backupFolder: folder };
       setSettings(newSettings);
       await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
@@ -532,6 +536,7 @@ export default function FlightSyncSystem() {
   const restoreFromFolder = async () => {
     if (!settings.backupFolder) return;
     try {
+      await ensureFolderAccess(settings.backupFolder);
       const { readTextFile } = await import('@tauri-apps/plugin-fs');
       const text = await readTextFile(`${settings.backupFolder}/${BACKUP_FILENAME}`);
       const { preview, error } = parseBackupJson(text);
