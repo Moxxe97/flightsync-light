@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.mock is hoisted to top of file, so factories cannot reference variables
 // declared in module scope. Use vi.hoisted() to share mock objects safely.
-const { fsMock, idbMock } = vi.hoisted(() => {
+const { fsMock, idbMock, coreMock } = vi.hoisted(() => {
   const fsMock = {
     writeTextFile: vi.fn(async () => {}),
     writeFile: vi.fn(async () => {}),
@@ -22,11 +22,19 @@ const { fsMock, idbMock } = vi.hoisted(() => {
     saveOFP: vi.fn(async () => {}),
     getOFP: vi.fn(async () => null),
   };
-  return { fsMock, idbMock };
+  // H1: runtime fs-scope grant — ensureFolderAccess() invokes this Rust
+  // command. Mocked as a no-op so the fs mocks above stay the source of
+  // truth for whether an operation is "allowed"; tests below assert it's
+  // called (with the right path) ahead of the fs calls it gates.
+  const coreMock = {
+    invoke: vi.fn(async () => {}),
+  };
+  return { fsMock, idbMock, coreMock };
 });
 
 vi.mock('@tauri-apps/plugin-fs', () => fsMock);
 vi.mock('@flightsync/core/idb', () => idbMock);
+vi.mock('@tauri-apps/api/core', () => coreMock);
 
 import { runFolderBackup, restoreFolderBlobs } from '../folderBackup';
 
@@ -34,6 +42,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   fsMock.exists.mockResolvedValue(false);
   fsMock.lstat.mockRejectedValue(new Error('ENOENT: no such file or directory'));
+  coreMock.invoke.mockResolvedValue(undefined);
 });
 
 const FLIGHTS = [{ id: 'f1', date: '2026-03-15', flightNumber: 'AC123' }];
@@ -62,6 +71,19 @@ describe('runFolderBackup', () => {
     expect(payload.schemaVersion).toBe(1);
     expect(payload.flights).toHaveLength(1);
     expect(payload.residence).toHaveLength(1);
+  });
+
+  // H1: the fs capability grants no static scope any more — the picked
+  // folder must be re-granted via the Rust `allow_backup_folder` command on
+  // every run, before any fs op (mkdir/writeTextFile/etc.) is attempted.
+  it('grants runtime fs access to the folder (allow_backup_folder) before any fs write', async () => {
+    await runFolderBackup({ folder: '/Users/x/Backups', flights: FLIGHTS, residence: RES, settings: {} });
+    expect(coreMock.invoke).toHaveBeenCalledWith('allow_backup_folder', { path: '/Users/x/Backups' });
+    const invokeOrder = coreMock.invoke.mock.invocationCallOrder[0];
+    const mkdirOrder = fsMock.mkdir.mock.invocationCallOrder[0];
+    const writeOrder = fsMock.writeTextFile.mock.invocationCallOrder[0];
+    expect(invokeOrder).toBeLessThan(mkdirOrder);
+    expect(invokeOrder).toBeLessThan(writeOrder);
   });
 
   it('mirrors OFPs and boarding passes write-once (skips existing files)', async () => {
@@ -93,6 +115,17 @@ describe('restoreFolderBlobs', () => {
     expect(idbMock.saveOFP).toHaveBeenCalledWith('f1', expect.objectContaining({ fileName: 'ofp-f1.pdf' }));
     expect(idbMock.saveBoardingPass).toHaveBeenCalledTimes(1);
     expect(r).toEqual({ ofps: 1, boardingPasses: 1 });
+  });
+
+  // H1: same runtime grant, on the restore path — must happen before the
+  // first exists()/readDir() call against the folder.
+  it('grants runtime fs access to the folder (allow_backup_folder) before reading it', async () => {
+    fsMock.readDir.mockImplementation(async () => []);
+    await restoreFolderBlobs('/b', FLIGHTS);
+    expect(coreMock.invoke).toHaveBeenCalledWith('allow_backup_folder', { path: '/b' });
+    const invokeOrder = coreMock.invoke.mock.invocationCallOrder[0];
+    const existsOrder = fsMock.exists.mock.invocationCallOrder[0];
+    expect(invokeOrder).toBeLessThan(existsOrder);
   });
 
   it('skips OFP already in IDB and boarding pass already stored; returns zeroed counts', async () => {

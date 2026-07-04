@@ -9,6 +9,7 @@
 import {
   writeTextFile, writeFile, mkdir, exists, readDir, readFile, lstat,
 } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { buildBackupPayload, BACKUP_FILENAME } from './driveBackup';
 import { ofpFileName, bpFileName, extFromMime } from './driveArchive';
 import {
@@ -16,6 +17,21 @@ import {
   getAllOFPFlightIds, getOFPBytes,
   saveBoardingPass, saveOFP, getOFP,
 } from '@flightsync/core/idb';
+
+// The fs capability grants no static `fs:scope-*` (audit H1 — a static
+// home-recursive scope would authorize the entire $HOME to any XSS/compromised
+// dependency in the webview). Instead the Rust `allow_backup_folder` command
+// adds exactly the user-picked folder to the fs plugin's runtime scope. Every
+// fs entrypoint below (and the folder picker / restore trigger in App.jsx)
+// calls this first; it's idempotent (re-allowing an already-allowed directory
+// is harmless) so it's safe to call on every run, not just the first.
+// Intentionally not try/caught here: if the grant itself fails, that should
+// surface like any other fs error rather than being swallowed, and the
+// fs call that follows would fail anyway if the folder isn't allowed.
+export async function ensureFolderAccess(folder) {
+  if (!folder) return;
+  await invoke('allow_backup_folder', { path: folder });
+}
 
 async function ensureDirs(folder) {
   await mkdir(folder, { recursive: true });
@@ -35,11 +51,18 @@ async function ensureDirs(folder) {
 // guard inert (this was H2's runtime defect). So we fail closed: rethrow
 // anything that isn't recognizably a not-found error, and let callers decide
 // how to react (abort the write vs. skip the affected file/category).
-const NOT_FOUND_PATTERNS = ['no such file', 'os error 2', 'cannot find', 'not found', 'notfound'];
+// Plain substrings, checked with .includes(); 'os error 2' is the one
+// exception — as a bare substring it would also match 'os error 20' (ENOTDIR),
+// 'os error 21' (EISDIR), etc., which are real (non-ENOENT) errors that must
+// NOT be treated as "not found". That one entry is matched with a word
+// boundary instead (see isNotFoundError below) so only the real ENOENT
+// ("os error 2") matches.
+const NOT_FOUND_PATTERNS = ['no such file', 'cannot find', 'not found', 'notfound'];
+const NOT_FOUND_OS_ERROR_2 = /os error 2\b/;
 
 function isNotFoundError(err) {
   const msg = String(err?.message ?? err ?? '').toLowerCase();
-  return NOT_FOUND_PATTERNS.some((p) => msg.includes(p));
+  return NOT_FOUND_PATTERNS.some((p) => msg.includes(p)) || NOT_FOUND_OS_ERROR_2.test(msg);
 }
 
 async function lstatSymlink(path) {
@@ -71,6 +94,7 @@ export async function runFolderBackup({ folder, flights, residence, settings }) 
   if ((flights?.length || 0) === 0 && (residence?.length || 0) === 0) {
     return { skipped: 'empty' };
   }
+  await ensureFolderAccess(folder);
   await ensureDirs(folder);
 
   const backupPath = `${folder}/${BACKUP_FILENAME}`;
@@ -120,6 +144,7 @@ export async function runFolderBackup({ folder, flights, residence, settings }) 
 // flights: the restored flight rows (id/date/flightNumber feed saveOFP
 // metadata). Skips blobs already present in IDB.
 export async function restoreFolderBlobs(folder, flights) {
+  await ensureFolderAccess(folder);
   let ofps = 0;
   const ofpsDir = `${folder}/ofps`;
   if ((await exists(ofpsDir)) && !(await isUnsafePath(ofpsDir))) {

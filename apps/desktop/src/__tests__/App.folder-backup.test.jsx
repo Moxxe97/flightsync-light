@@ -46,9 +46,14 @@ vi.mock('../utils/driveBackup', () => ({
 // ─── The folder backup seams we assert on ───
 const runFolderBackupMock = vi.fn(async () => ({ ofps: 0, boardingPasses: 0 }));
 const restoreFolderBlobsMock = vi.fn(async () => ({ ofps: 0, boardingPasses: 0 }));
+// ensureFolderAccess (H1: runtime fs scope grant) — a no-op stub here; the
+// real ACL grant is only meaningful against a live Tauri backend, and is
+// covered by folderBackup.test.js + the controller's build smoke.
+const ensureFolderAccessMock = vi.fn(async () => {});
 vi.mock('../utils/folderBackup', () => ({
   runFolderBackup: (...args) => runFolderBackupMock(...args),
   restoreFolderBlobs: (...args) => restoreFolderBlobsMock(...args),
+  ensureFolderAccess: (...args) => ensureFolderAccessMock(...args),
 }));
 
 // ─── @tauri-apps/plugin-fs: provide readTextFile for the restore test ───
@@ -140,6 +145,7 @@ describe('App debounced folder auto-backup', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     runFolderBackupMock.mockClear();
     restoreFolderBlobsMock.mockClear();
+    ensureFolderAccessMock.mockClear();
     readTextFileMock.mockClear();
     window.localStorage.clear();
   });
@@ -197,6 +203,7 @@ describe('App restore from folder', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     runFolderBackupMock.mockClear();
     restoreFolderBlobsMock.mockClear();
+    ensureFolderAccessMock.mockClear();
     readTextFileMock.mockClear();
     window.localStorage.clear();
   });
