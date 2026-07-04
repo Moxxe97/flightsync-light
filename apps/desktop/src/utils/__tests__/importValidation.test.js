@@ -153,3 +153,100 @@ describe('row validators', () => {
     expect(isValidResidenceDay({})).toBe(false);
   });
 });
+
+// M9: validators previously checked field TYPES only (typeof f.date ===
+// 'string'), not CONTENT — no date-format check, no control-character check,
+// no length bounds. That was the direct enabler of the ICS-injection vuln
+// (a `date` with embedded CRLF passed validation and reached DTSTART/DTEND
+// unescaped). These tests lock in content-level hardening.
+describe('row validators — content hardening (M9)', () => {
+  describe('isValidFlight', () => {
+    it('rejects a date that is not YYYY-MM-DD', () => {
+      expect(isValidFlight({ ...flight, date: '2026-5-1' })).toBe(false);
+      expect(isValidFlight({ ...flight, date: '01/05/2026' })).toBe(false);
+      expect(isValidFlight({ ...flight, date: 'not-a-date' })).toBe(false);
+    });
+
+    it('rejects a date with an embedded CRLF (the ICS-injection shape)', () => {
+      expect(isValidFlight({ ...flight, date: '2026-05-01\r\nX-EVIL:injected' })).toBe(false);
+    });
+
+    it('rejects a flightNumber containing control characters', () => {
+      expect(isValidFlight({ ...flight, flightNumber: 'AC1\r\n23' })).toBe(false);
+      expect(isValidFlight({ ...flight, flightNumber: 'AC1\n23' })).toBe(false);
+      expect(isValidFlight({ ...flight, flightNumber: 'AC\x0023' })).toBe(false);
+    });
+
+    it('rejects an over-long flightNumber', () => {
+      expect(isValidFlight({ ...flight, flightNumber: 'A'.repeat(17) })).toBe(false);
+      // Boundary: 16 chars is still accepted.
+      expect(isValidFlight({ ...flight, flightNumber: 'A'.repeat(16) })).toBe(true);
+    });
+
+    it('accepts realistic flight numbers of varying real-world shapes', () => {
+      expect(isValidFlight({ ...flight, flightNumber: 'AC0871' })).toBe(true);
+      expect(isValidFlight({ ...flight, flightNumber: 'ABC1234A' })).toBe(true);
+      expect(isValidFlight({ ...flight, flightNumber: '' })).toBe(true);
+    });
+
+    it('accepts a legitimate multi-line notes field (real textarea input)', () => {
+      expect(isValidFlight({ ...flight, notes: 'ligne 1\nligne 2' })).toBe(true);
+    });
+
+    it('rejects notes containing NUL or ESC control characters', () => {
+      expect(isValidFlight({ ...flight, notes: 'a\x00b' })).toBe(false);
+      expect(isValidFlight({ ...flight, notes: 'a\x1bb' })).toBe(false);
+    });
+
+    it('rejects notes that is not a string', () => {
+      expect(isValidFlight({ ...flight, notes: 123 })).toBe(false);
+    });
+  });
+
+  describe('isValidResidenceDay', () => {
+    it('rejects a date that is not YYYY-MM-DD', () => {
+      expect(isValidResidenceDay({ date: '2026-5-1' })).toBe(false);
+      expect(isValidResidenceDay({ date: '2026/05/01' })).toBe(false);
+    });
+
+    it('rejects a date with an embedded CRLF', () => {
+      expect(isValidResidenceDay({ date: '2026-05-01\r\nX-EVIL:injected' })).toBe(false);
+    });
+
+    it('accepts the four known location values and null', () => {
+      for (const loc of ['canada', 'mexico', 'international', 'transit', null]) {
+        expect(isValidResidenceDay({ date: '2026-05-01', location: loc })).toBe(true);
+      }
+    });
+
+    it('accepts an unknown-but-clean location string (residence.js "other" bucket is forward-compatible by design)', () => {
+      expect(isValidResidenceDay({ date: '2026-05-01', location: 'some-future-location' })).toBe(true);
+    });
+
+    it('rejects a location containing control characters', () => {
+      expect(isValidResidenceDay({ date: '2026-05-01', location: 'canada\r\nX-EVIL:injected' })).toBe(false);
+    });
+
+    it('rejects an over-long location', () => {
+      expect(isValidResidenceDay({ date: '2026-05-01', location: 'x'.repeat(33) })).toBe(false);
+    });
+
+    it('accepts a legitimate multi-line notes field', () => {
+      expect(isValidResidenceDay({ date: '2026-05-01', notes: 'hôtel\nvol de nuit' })).toBe(true);
+    });
+
+    it('rejects notes containing control characters other than newline', () => {
+      expect(isValidResidenceDay({ date: '2026-05-01', notes: 'a\x00b' })).toBe(false);
+    });
+  });
+});
+
+describe('parseBackupJson — content hardening (M9)', () => {
+  it('rejects a backup whose flight has a control-char (CRLF-injected) date', () => {
+    const evilFlight = { id: 'f1', date: '2026-05-01\r\nX-EVIL:injected', flightNumber: 'AC871' };
+    const text = JSON.stringify({ version: 1, exportDate: 'd', deviceId: 'dev', data: { flights: [evilFlight], residence: [] } });
+    const { preview, error } = parseBackupJson(text);
+    expect(preview).toBeUndefined();
+    expect(error).toMatch(/invalide/i);
+  });
+});
