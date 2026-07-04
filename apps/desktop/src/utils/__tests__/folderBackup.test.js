@@ -10,6 +10,8 @@ const { fsMock, idbMock } = vi.hoisted(() => {
     exists: vi.fn(async () => false),
     readDir: vi.fn(async () => []),
     readFile: vi.fn(async () => new Uint8Array([1])),
+    // Default: "not found" (ENOENT-like) — lstatSymlink() must treat this as "not a symlink".
+    lstat: vi.fn(async () => { throw new Error('ENOENT: no such file or directory'); }),
   };
   const idbMock = {
     getAllBoardingPassDates: vi.fn(async () => []),
@@ -28,7 +30,11 @@ vi.mock('@flightsync/core/idb', () => idbMock);
 
 import { runFolderBackup, restoreFolderBlobs } from '../folderBackup';
 
-beforeEach(() => { vi.clearAllMocks(); fsMock.exists.mockResolvedValue(false); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  fsMock.exists.mockResolvedValue(false);
+  fsMock.lstat.mockRejectedValue(new Error('ENOENT: no such file or directory'));
+});
 
 const FLIGHTS = [{ id: 'f1', date: '2026-03-15', flightNumber: 'AC123' }];
 const RES = [{ date: '2026-03-15', location: 'transit' }];
@@ -102,5 +108,84 @@ describe('restoreFolderBlobs', () => {
     expect(idbMock.saveOFP).not.toHaveBeenCalled();
     expect(idbMock.saveBoardingPass).not.toHaveBeenCalled();
     expect(r).toEqual({ ofps: 0, boardingPasses: 0 });
+  });
+});
+
+// ─── H2: writes must refuse to follow a planted symlink ───────────────────
+describe('runFolderBackup symlink guards (H2)', () => {
+  it('throws and refuses to write when the backup JSON target is already a symlink', async () => {
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/flightsync-light-backup.json') return { isSymlink: true };
+      throw new Error('ENOENT: no such file or directory');
+    });
+    await expect(
+      runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} }),
+    ).rejects.toThrow(/symlink/i);
+    expect(fsMock.writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it('skips the whole ofps category when the ofps directory itself is a symlink', async () => {
+    idbMock.getAllOFPFlightIds.mockResolvedValue(new Set(['f1']));
+    idbMock.getOFPBytes.mockResolvedValue(new ArrayBuffer(4));
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/ofps') return { isSymlink: true };
+      throw new Error('ENOENT: no such file or directory');
+    });
+    const r = await runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} });
+    expect(fsMock.writeFile.mock.calls.some(([p]) => p.includes('/ofps/'))).toBe(false);
+    expect(r.ofps).toBe(0);
+  });
+
+  it('skips an individual ofp target that is already a symlink, even when exists() reports false (dangling link)', async () => {
+    idbMock.getAllOFPFlightIds.mockResolvedValue(new Set(['f1']));
+    idbMock.getOFPBytes.mockResolvedValue(new ArrayBuffer(4));
+    // Dangling symlink: exists() (which follows symlinks) lies and says "no file here" —
+    // the write-once guard alone would NOT stop a write through it.
+    fsMock.exists.mockResolvedValue(false);
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/ofps/ofp-f1.pdf') return { isSymlink: true };
+      throw new Error('ENOENT: no such file or directory');
+    });
+    const r = await runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} });
+    expect(fsMock.writeFile).not.toHaveBeenCalled();
+    expect(r.ofps).toBe(0);
+  });
+});
+
+// ─── H3: restore must refuse to read through a planted symlink ────────────
+describe('restoreFolderBlobs symlink guards (H3)', () => {
+  it('skips a readDir entry flagged isSymlink instead of reading it (ofps)', async () => {
+    fsMock.readDir.mockImplementation(async (p) => (p.endsWith('ofps')
+      ? [{ name: 'ofp-f1.pdf', isSymlink: true, isFile: false, isDirectory: false }]
+      : []));
+    fsMock.exists.mockResolvedValue(true);
+    idbMock.getOFP.mockResolvedValue(null);
+    const r = await restoreFolderBlobs('/b', FLIGHTS);
+    expect(fsMock.readFile).not.toHaveBeenCalled();
+    expect(idbMock.saveOFP).not.toHaveBeenCalled();
+    expect(r.ofps).toBe(0);
+  });
+
+  it('skips a readDir entry flagged isSymlink instead of reading it (boarding passes)', async () => {
+    fsMock.readDir.mockImplementation(async (p) => (p.endsWith('boarding-passes')
+      ? [{ name: 'bp-2026-03-15-0.pdf', isSymlink: true, isFile: false, isDirectory: false }]
+      : []));
+    fsMock.exists.mockResolvedValue(true);
+    idbMock.getBoardingPassesForDate.mockResolvedValue([]);
+    const r = await restoreFolderBlobs('/b', FLIGHTS);
+    expect(fsMock.readFile).not.toHaveBeenCalled();
+    expect(idbMock.saveBoardingPass).not.toHaveBeenCalled();
+    expect(r.boardingPasses).toBe(0);
+  });
+
+  it('skips the whole ofps category (never calls readDir on it) when the subdir itself is a symlink', async () => {
+    fsMock.exists.mockResolvedValue(true);
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/ofps') return { isSymlink: true };
+      throw new Error('ENOENT: no such file or directory');
+    });
+    const r = await restoreFolderBlobs('/b', FLIGHTS);
+    expect(fsMock.readDir.mock.calls.some(([p]) => p === '/b/ofps')).toBe(false);
+    expect(r.ofps).toBe(0);
   });
 });
