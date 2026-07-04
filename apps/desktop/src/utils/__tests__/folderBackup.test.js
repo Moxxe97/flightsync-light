@@ -150,6 +150,46 @@ describe('runFolderBackup symlink guards (H2)', () => {
     expect(fsMock.writeFile).not.toHaveBeenCalled();
     expect(r.ofps).toBe(0);
   });
+
+  // ── Fail-closed: an lstat error that is NOT a "not found" (e.g. a Tauri ACL
+  // denial if fs:allow-lstat were ever missing/mis-scoped) must be treated as
+  // UNSAFE, never as "not a symlink". Confirms the guard fails closed instead
+  // of silently letting the write through (the exact runtime defect this fix
+  // addresses).
+  it('fails closed: skips (does not write) an ofp file when lstat rejects with a non-not-found error (simulated ACL denial)', async () => {
+    idbMock.getAllOFPFlightIds.mockResolvedValue(new Set(['f1']));
+    idbMock.getOFPBytes.mockResolvedValue(new ArrayBuffer(4));
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/ofps/ofp-f1.pdf') throw new Error('fs.lstat not allowed on path');
+      throw new Error('ENOENT: no such file or directory');
+    });
+    const r = await runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} });
+    expect(fsMock.writeFile).not.toHaveBeenCalled();
+    expect(r.ofps).toBe(0);
+  });
+
+  it('fails closed: aborts the whole backup (writeTextFile never called) when the main JSON lstat rejects with a non-not-found error', async () => {
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/flightsync-light-backup.json') throw new Error('fs.lstat not allowed on path');
+      throw new Error('ENOENT: no such file or directory');
+    });
+    await expect(
+      runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} }),
+    ).rejects.toThrow(/fs\.lstat not allowed/);
+    expect(fsMock.writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it('treats a genuine not-found lstat rejection as safe and lets the write proceed', async () => {
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/flightsync-light-backup.json') throw new Error('No such file or directory (os error 2)');
+      throw new Error('ENOENT: no such file or directory');
+    });
+    await runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} });
+    expect(fsMock.writeTextFile).toHaveBeenCalledWith(
+      '/b/flightsync-light-backup.json',
+      expect.any(String),
+    );
+  });
 });
 
 // ─── H3: restore must refuse to read through a planted symlink ────────────
