@@ -2,6 +2,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 use tauri::Manager;
+use tauri_plugin_fs::FsExt;
 
 /// Starts a local TCP listener. Returns the port number.
 ///
@@ -309,6 +310,21 @@ fn delete_refresh_token() -> Result<(), String> {
     }
 }
 
+/// Grants the fs plugin's runtime scope read/write access to a single,
+/// user-picked directory (recursively, so its `ofps/`/`boarding-passes/`
+/// sub-folders are covered too). Called by the JS side right after the
+/// folder picker resolves, and again (idempotently) before every folder
+/// backup/restore operation — the capability file grants no static
+/// `fs:scope-*`, so without this the fs commands have nothing allowed and
+/// every read/write is denied (audit H1: this replaces the previous
+/// `fs:scope-home-recursive`, which authorized the entire home directory).
+#[tauri::command]
+fn allow_backup_folder(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    app.fs_scope()
+        .allow_directory(&path, true)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -319,7 +335,8 @@ pub fn run() {
             open_google_auth_window,
             save_refresh_token,
             load_refresh_token,
-            delete_refresh_token
+            delete_refresh_token,
+            allow_backup_folder
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

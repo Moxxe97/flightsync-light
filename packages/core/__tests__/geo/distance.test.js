@@ -28,6 +28,27 @@ describe('haversineDistance', () => {
   it('returns 0 for identical points', () => {
     expect(haversineDistance(45, -73, 45, -73)).toBe(0);
   });
+
+  // H5: near-antipodal (and exactly antipodal) pairs used to push the
+  // haversine `a` term just above 1.0 due to floating-point error, making
+  // Math.asin(Math.sqrt(a)) return NaN. Half the Earth's circumference in
+  // nm is π × 3440.065 ≈ 10808.
+  it('returns a finite ~half-circumference distance for an exact antipodal pair', () => {
+    const nm = haversineDistance(0, 0, 0, 180);
+    expect(Number.isFinite(nm)).toBe(true);
+    expect(nm).toBeGreaterThan(10700);
+    expect(nm).toBeLessThan(10900);
+  });
+  it('returns a finite ~half-circumference distance for a near-antipodal pair (fp-error edge case where a > 1)', () => {
+    // These two points are (numerically) antipodal to within 1e-6°; the
+    // haversine `a` term rounds to 1.0000000000000004 here, pushing
+    // Math.sqrt(a) fractionally above 1 and Math.asin(...) into NaN
+    // without a clamp (verified in Node against Light's own distance.js).
+    const nm = haversineDistance(69.16864714481952, 25.220029187932795, -69.16864761031958, -154.77997071813172);
+    expect(Number.isFinite(nm)).toBe(true);
+    expect(nm).toBeGreaterThan(10700);
+    expect(nm).toBeLessThan(10900);
+  });
 });
 
 describe('greatCircleCanadianDistance', () => {
@@ -46,6 +67,10 @@ describe('greatCircleCanadianDistance', () => {
     const canadian = greatCircleCanadianDistance(51.47, -0.45, 49.00, 2.55);
     expect(canadian).toBe(0);
   });
+  it('returns a finite value (not NaN) for a near-antipodal pair', () => {
+    const canadian = greatCircleCanadianDistance(69.16864714481952, 25.220029187932795, -69.16864761031958, -154.77997071813172);
+    expect(Number.isFinite(canadian)).toBe(true);
+  });
 });
 
 describe('greatCircleCanadianFraction', () => {
@@ -59,5 +84,11 @@ describe('greatCircleCanadianFraction', () => {
     const f = greatCircleCanadianFraction(43.68, -79.62, 49.91, -97.24);
     expect(f).toBeGreaterThan(0.3);
     expect(f).toBeLessThan(0.7);
+  });
+  it('returns a finite fraction in [0,1] (not NaN) for a near-antipodal pair', () => {
+    const f = greatCircleCanadianFraction(69.16864714481952, 25.220029187932795, -69.16864761031958, -154.77997071813172);
+    expect(Number.isFinite(f)).toBe(true);
+    expect(f).toBeGreaterThanOrEqual(0);
+    expect(f).toBeLessThanOrEqual(1);
   });
 });
