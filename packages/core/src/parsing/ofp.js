@@ -76,6 +76,12 @@ function resolve(code) {
   return ICAO_TO_IATA[u] ?? u;
 }
 
+// Un OFP piégé peut produire des dizaines de milliers de "waypoints" fabriqués
+// dans la section FLIGHT LOG — bornes dures (audit M4). Un vrai journal de vol
+// compte ~50-150 fixes ; ces plafonds sont sans effet sur un OFP réel.
+const MAX_WAYPOINTS = 500;
+const MAX_LOG_CHARS = 300_000;
+
 // ─── Waypoint Parser ──────────────────────────────────────────
 // AC OFP (Smart4Aviation) flight log format, each waypoint has:
 //   LAT line: "N 4528.2  0000 .....  34  207  M030  ....."
@@ -84,17 +90,25 @@ function resolve(code) {
 // Lat format: N/S + DDMM.M  (2-digit deg + 2-digit min + decimal)
 // Lon format: E/W + DDDMM.M (3-digit deg + 2-digit min + decimal)
 // pdfjs joins items with spaces, so "N" and "4528.2" may be separate tokens
-function parseWaypointsFromOFP(text) {
+export function parseWaypointsFromOFP(text) {
   const T = text.toUpperCase();
   const flightLogIdx = T.indexOf('FLIGHT LOG');
   if (flightLogIdx === -1) return [];
-  const logText = T.slice(flightLogIdx);
+  // Bound how much text is scanned at all — a crafted "flight log" section
+  // could otherwise be arbitrarily large. A real flight-log section is well
+  // under this (audit M4).
+  const logText = T.slice(flightLogIdx, flightLogIdx + MAX_LOG_CHARS);
+  let truncated = false;
 
   // Find all latitudes: N/S + optional space + 2-digit deg + 2-digit min + decimal
   const latRe = /([NS])\s*(\d{2})\s*(\d{2}\.\d+)/g;
   const latMatches = [];
   let m;
   while ((m = latRe.exec(logText)) !== null) {
+    // Bound match-collection itself, independent of the eventual pairing cap
+    // below — a generous multiple of MAX_WAYPOINTS so real OFPs (which pair
+    // 1:1) are never affected.
+    if (latMatches.length >= MAX_WAYPOINTS * 4) { truncated = true; break; }
     const lat = (parseInt(m[2]) + parseFloat(m[3]) / 60) * (m[1] === 'S' ? -1 : 1);
     // Sanity check: valid latitude range
     if (lat < -90 || lat > 90) continue;
@@ -105,6 +119,7 @@ function parseWaypointsFromOFP(text) {
   const lonRe = /([EW])\s*(\d{3})\s*(\d{2}\.\d+)\s+(\d+)/g;
   const lonMatches = [];
   while ((m = lonRe.exec(logText)) !== null) {
+    if (lonMatches.length >= MAX_WAYPOINTS * 4) { truncated = true; break; }
     const lon = (parseInt(m[2]) + parseFloat(m[3]) / 60) * (m[1] === 'W' ? -1 : 1);
     const dist = parseInt(m[4]);
     // Sanity check: valid longitude range
@@ -116,6 +131,7 @@ function parseWaypointsFromOFP(text) {
   const waypoints = [];
   let lonIdx = 0;
   for (const latEntry of latMatches) {
+    if (waypoints.length >= MAX_WAYPOINTS) { truncated = true; break; }
     // Advance to next lon that comes after this lat
     while (lonIdx < lonMatches.length && lonMatches[lonIdx].pos < latEntry.endPos) lonIdx++;
     if (lonIdx >= lonMatches.length) break;
@@ -144,6 +160,7 @@ function parseWaypointsFromOFP(text) {
     }
   }
   waypoints.distCorrected = distCorrected;
+  if (truncated) waypoints.truncated = true;
 
   return waypoints;
 }
@@ -267,6 +284,11 @@ export function parseOfp(text) {
     calcMethod = `waypoints (${waypoints.length} fixes)`;
     if (waypoints.distCorrected > 0) {
       calcMethod += `, ${waypoints.distCorrected} dist-corrected`;
+    }
+    if (waypoints.truncated) {
+      calcMethod += ', tronqué';
+      const wpWarning = `Journal de vol anormalement long — waypoints limités aux ${MAX_WAYPOINTS} premiers.`;
+      warning = warning ? `${warning} ${wpWarning}` : wpWarning;
     }
   } else if (bothCanadian) {
     canadianDistance = gcDist || 880;
