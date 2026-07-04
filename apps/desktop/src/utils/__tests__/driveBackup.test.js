@@ -12,7 +12,10 @@ vi.mock('@flightsync/core/idb', () => ({
   saveBoardingPass: vi.fn(async () => {}),
 }));
 
-import { buildBackupPayload, runBackup, restoreBlobs, BACKUP_FILENAME, BACKUP_FOLDER } from '../driveBackup';
+import {
+  buildBackupPayload, runBackup, restoreBlobs, downloadBackup, persistRestoreData, sniffMagic,
+  BACKUP_FILENAME, BACKUP_FOLDER, MAX_BACKUP_BYTES, MAX_BLOB_BYTES,
+} from '../driveBackup';
 
 const okJson = (obj) => ({ ok: true, status: 200, json: async () => obj });
 
@@ -177,8 +180,10 @@ describe('restoreBlobs dedup', () => {
           { id: 'BID1', name: `bp-${date}-1.pdf`, mimeType: 'application/pdf' },
         ] });
       }
-      // alt=media byte download for the missing file only.
-      if (u.includes('alt=media')) return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([7]).buffer };
+      // alt=media byte download for the missing file only. Real %PDF magic bytes
+      // so this fixture passes the M8 content-validation gate — this test is
+      // about dedup, not validation (that's covered separately).
+      if (u.includes('alt=media')) return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 1]).buffer };
       return okJson({ files: [] });
     });
 
@@ -194,5 +199,196 @@ describe('restoreBlobs dedup', () => {
     const mediaUrls = globalThis.fetch.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('alt=media'));
     expect(mediaUrls.some((u) => u.includes('BID0'))).toBe(false);
     expect(mediaUrls.some((u) => u.includes('BID1'))).toBe(true);
+  });
+});
+
+describe('sniffMagic (M8)', () => {
+  it('recognizes a PDF magic number', () => {
+    expect(sniffMagic(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]))).toBe('pdf');
+  });
+  it('recognizes a JPEG magic number', () => {
+    expect(sniffMagic(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe('jpeg');
+  });
+  it('recognizes a PNG magic number', () => {
+    expect(sniffMagic(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]))).toBe('png');
+  });
+  it('returns null for unrecognized bytes', () => {
+    expect(sniffMagic(new Uint8Array([0x00, 0x01, 0x02, 0x03]))).toBeNull();
+  });
+  it('returns null for bytes shorter than any known magic number', () => {
+    expect(sniffMagic(new Uint8Array([0x25, 0x50]))).toBeNull();
+  });
+});
+
+describe('restoreBlobs content validation (M8)', () => {
+  beforeEach(() => { globalThis.fetch = vi.fn(); });
+
+  it('saves a valid %PDF OFP but skips a same-named file with a bad magic number, counting it as skipped', async () => {
+    const idb = await import('@flightsync/core/idb');
+    idb.saveOFP.mockClear();
+    const flights = [
+      { id: 'f1', date: '2025-01-01', flightNumber: 'AC100' },
+      { id: 'f2', date: '2025-01-02', flightNumber: 'AC200' },
+    ];
+
+    globalThis.fetch.mockImplementation(async (url) => {
+      const u = String(url);
+      const dec = decodeURIComponent(u);
+      if (dec.includes(`name='${BACKUP_FOLDER}'`)) return okJson({ files: [{ id: 'ROOT' }] });
+      if (dec.includes("name='ofps'")) return okJson({ files: [{ id: 'OFPF' }] });
+      if (dec.includes("name='boarding-passes'")) return okJson({ files: [] });
+      if (dec.includes("'OFPF' in parents")) {
+        return okJson({ files: [
+          { id: 'GOODPDF', name: 'ofp-f1.pdf' },
+          { id: 'BADMAGIC', name: 'ofp-f2.pdf' },
+        ] });
+      }
+      if (u.includes('alt=media')) {
+        if (u.includes('GOODPDF')) {
+          return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2]).buffer };
+        }
+        if (u.includes('BADMAGIC')) {
+          return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([0x00, 0x01, 0x02]).buffer };
+        }
+      }
+      return okJson({ files: [] });
+    });
+
+    const out = await restoreBlobs(flights);
+
+    expect(idb.saveOFP).toHaveBeenCalledTimes(1);
+    expect(idb.saveOFP.mock.calls[0][0]).toBe('f1');
+    expect(out.ofps).toBe(1);
+    expect(out.skipped).toBe(1);
+  });
+
+  it('skips an oversized OFP blob even when it starts with a valid PDF magic number', async () => {
+    const idb = await import('@flightsync/core/idb');
+    idb.saveOFP.mockClear();
+    const flights = [{ id: 'f1', date: '2025-01-01', flightNumber: 'AC100' }];
+    const oversized = new Uint8Array(MAX_BLOB_BYTES + 1);
+    oversized.set([0x25, 0x50, 0x44, 0x46]);
+
+    globalThis.fetch.mockImplementation(async (url) => {
+      const u = String(url);
+      const dec = decodeURIComponent(u);
+      if (dec.includes(`name='${BACKUP_FOLDER}'`)) return okJson({ files: [{ id: 'ROOT' }] });
+      if (dec.includes("name='ofps'")) return okJson({ files: [{ id: 'OFPF' }] });
+      if (dec.includes("name='boarding-passes'")) return okJson({ files: [] });
+      if (dec.includes("'OFPF' in parents")) return okJson({ files: [{ id: 'HUGE', name: 'ofp-f1.pdf' }] });
+      if (u.includes('alt=media')) return { ok: true, status: 200, arrayBuffer: async () => oversized.buffer };
+      return okJson({ files: [] });
+    });
+
+    const out = await restoreBlobs(flights);
+
+    expect(idb.saveOFP).not.toHaveBeenCalled();
+    expect(out.ofps).toBe(0);
+    expect(out.skipped).toBe(1);
+  });
+
+  it('accepts a JPEG-magic boarding pass but skips a same-folder file with an invalid magic number', async () => {
+    const idb = await import('@flightsync/core/idb');
+    idb.saveBoardingPass.mockClear();
+    idb.getBoardingPassesForDate.mockImplementation(async () => []);
+    const date = '2025-03-11';
+
+    globalThis.fetch.mockImplementation(async (url) => {
+      const u = String(url);
+      const dec = decodeURIComponent(u);
+      if (dec.includes(`name='${BACKUP_FOLDER}'`)) return okJson({ files: [{ id: 'ROOT' }] });
+      if (dec.includes("name='ofps'")) return okJson({ files: [] });
+      if (dec.includes("name='boarding-passes'")) return okJson({ files: [{ id: 'BPF' }] });
+      if (dec.includes("'BPF' in parents")) {
+        return okJson({ files: [
+          { id: 'GOODJPG', name: `bp-${date}-0.jpg`, mimeType: 'image/jpeg' },
+          { id: 'BADBP', name: `bp-${date}-1.jpg`, mimeType: 'image/jpeg' },
+        ] });
+      }
+      if (u.includes('alt=media')) {
+        if (u.includes('GOODJPG')) return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([0xff, 0xd8, 0xff, 0xe0]).buffer };
+        if (u.includes('BADBP')) return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([0x00, 0x01, 0x02]).buffer };
+      }
+      return okJson({ files: [] });
+    });
+
+    const out = await restoreBlobs([]);
+
+    expect(idb.saveBoardingPass).toHaveBeenCalledTimes(1);
+    expect(idb.saveBoardingPass.mock.calls[0][0]).toBe(date);
+    expect(idb.saveBoardingPass.mock.calls[0][1].name).toBe(`bp-${date}-0.jpg`);
+    expect(out.boardingPasses).toBe(1);
+    expect(out.skipped).toBe(1);
+  });
+});
+
+describe('downloadBackup size cap (M6b)', () => {
+  beforeEach(() => { globalThis.fetch = vi.fn(); });
+
+  it('throws before reading the body when Content-Length exceeds the cap', async () => {
+    const textSpy = vi.fn(async () => '{}');
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: (k) => (k === 'content-length' ? String(MAX_BACKUP_BYTES + 1) : null) },
+      text: textSpy,
+    });
+    await expect(downloadBackup('FILE')).rejects.toThrow(/trop volumineuse/);
+    expect(textSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves normally for a small backup that declares a Content-Length', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: (k) => (k === 'content-length' ? '11' : null) },
+      text: async () => '{"ok":true}',
+    });
+    await expect(downloadBackup('FILE')).resolves.toBe('{"ok":true}');
+  });
+
+  it('falls back to the resolved text length and rejects an oversized body with no Content-Length', async () => {
+    const bigText = 'x'.repeat(MAX_BACKUP_BYTES + 1);
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => bigText,
+    });
+    await expect(downloadBackup('FILE')).rejects.toThrow(/trop volumineuse/);
+  });
+});
+
+describe('persistRestoreData ordering (M6a)', () => {
+  const keys = { FLIGHTS: 'ac-flights-data', RESIDENCE: 'ac-residence-data', SETTINGS: 'ac-sync-settings' };
+
+  it('persists flights, then residence, then settings, in that order', async () => {
+    const calls = [];
+    const storage = { set: vi.fn(async (k) => { calls.push(k); }) };
+    await persistRestoreData(storage, keys, { flights: [{ id: 'f1' }], residence: [{ date: 'd1' }], settings: { a: 1 } });
+    expect(calls).toEqual([keys.FLIGHTS, keys.RESIDENCE, keys.SETTINGS]);
+  });
+
+  it('skips the settings write when settings is null', async () => {
+    const storage = { set: vi.fn(async () => {}) };
+    await persistRestoreData(storage, keys, { flights: [], residence: [], settings: null });
+    expect(storage.set).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates a mid-sequence storage failure (e.g. QuotaExceededError) without finishing remaining writes', async () => {
+    const calls = [];
+    const storage = {
+      set: vi.fn(async (k) => {
+        calls.push(k);
+        if (k === keys.RESIDENCE) throw new Error('QuotaExceededError');
+      }),
+    };
+    // This ordering contract is what App.jsx's restoreFromDrive relies on: it
+    // only calls setFlights/setResidence/setSettings AFTER this call resolves,
+    // so a throw here (like this simulated quota failure) means React state
+    // is never mutated ahead of what actually made it to disk.
+    await expect(persistRestoreData(storage, keys, { flights: [], residence: [], settings: { a: 1 } }))
+      .rejects.toThrow(/QuotaExceededError/);
+    expect(calls).toEqual([keys.FLIGHTS, keys.RESIDENCE]); // SETTINGS never reached
   });
 });

@@ -40,13 +40,21 @@ const BACKUP_SNAPSHOT = JSON.stringify({
   settings: {},
 });
 const downloadBackupMock = vi.fn(async () => BACKUP_SNAPSHOT);
-const restoreBlobsMock = vi.fn(async () => ({ ofps: 0, boardingPasses: 0 }));
-vi.mock('../utils/driveBackup', () => ({
-  runBackup: vi.fn(async () => {}),
-  findBackup: (...a) => findBackupMock(...a),
-  downloadBackup: (...a) => downloadBackupMock(...a),
-  restoreBlobs: (...a) => restoreBlobsMock(...a),
-}));
+const restoreBlobsMock = vi.fn(async () => ({ ofps: 0, boardingPasses: 0, skipped: 0 }));
+vi.mock('../utils/driveBackup', async () => {
+  // persistRestoreData (M6a) is kept REAL (not stubbed): it's a small pure
+  // function over the `storage` adapter App.jsx passes in, and this file's
+  // test harness is exactly where we want to exercise its persist-then-set
+  // ordering against the real (polyfilled) localStorage below.
+  const actual = await vi.importActual('../utils/driveBackup');
+  return {
+    ...actual,
+    runBackup: vi.fn(async () => {}),
+    findBackup: (...a) => findBackupMock(...a),
+    downloadBackup: (...a) => downloadBackupMock(...a),
+    restoreBlobs: (...a) => restoreBlobsMock(...a),
+  };
+});
 
 vi.mock('@flightsync/core/idb', () => ({
   getAllBoardingPassDates: async () => new Set(),
@@ -104,6 +112,40 @@ describe('App proactive Drive restore offer', () => {
 
     expect(downloadBackupMock).toHaveBeenCalledWith('BACKUP_FILE_ID');
     expect(restoreBlobsMock).toHaveBeenCalled();
+  });
+
+  it('a storage.set failure during persist leaves React state untouched and never reaches blob restore (M6a)', async () => {
+    await renderApp();
+    await screen.findByText('Sauvegarde trouvée sur Google Drive');
+
+    // Simulate a QuotaExceededError on the very FIRST persisted key, so the
+    // restore never writes anything to disk and there's no partial state.
+    const realSetItem = window.localStorage.setItem;
+    window.localStorage.setItem = (key, value) => {
+      if (key === 'ac-flights-data') throw new Error('QuotaExceededError: test');
+      return realSetItem(key, value);
+    };
+
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByText('Restaurer'));
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      });
+
+      // The download succeeded, but the failed persist must short-circuit
+      // BEFORE setFlights/setResidence — restoreBlobs only ever runs after
+      // those, so it never being called is our proxy for "state untouched".
+      expect(downloadBackupMock).toHaveBeenCalledWith('BACKUP_FILE_ID');
+      expect(restoreBlobsMock).not.toHaveBeenCalled();
+
+      // A clear French error is surfaced instead of a silent state/disk mismatch.
+      expect(await screen.findByText(/Restauration annulée : stockage insuffisant/)).toBeTruthy();
+
+      // Disk was never overwritten for the key that failed.
+      expect(window.localStorage.getItem('ac-flights-data')).toBeNull();
+    } finally {
+      window.localStorage.setItem = realSetItem;
+    }
   });
 
   it('signed out: no restore offer', async () => {
