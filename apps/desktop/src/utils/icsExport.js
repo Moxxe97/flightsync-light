@@ -3,7 +3,16 @@
 import { icsEscape } from './exportEscape';
 
 // ─── ICS Export ───────────────────────────────────────────────
+// ICS lines are CRLF-delimited; unlike SUMMARY/DESCRIPTION (escaped) and UID
+// (allowlisted chars), `flight.date` was built straight into DTSTART/DTEND
+// with no check, so an embedded CRLF could inject forged VEVENT blocks.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Returns the VEVENT text, or null if the flight's date isn't a plain
+// YYYY-MM-DD string — such a flight is skipped entirely rather than risking
+// injection or aborting the whole export.
 function flightToICSEvent(flight) {
+  if (!ISO_DATE_RE.test(flight.date)) return null;
   const dateStr = flight.date.replace(/-/g, ''); // "20260311"
   const startHour = 8; // Default departure time (no actual time in OFP data)
   const durationMins = Math.round((flight.totalTime || 0) * 60);
@@ -43,7 +52,7 @@ function flightToICSEvent(flight) {
 }
 
 export function exportICS(flights) {
-  const events = flights.map(flightToICSEvent).join('\r\n');
+  const events = flights.map(flightToICSEvent).filter(Boolean).join('\r\n');
   const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
