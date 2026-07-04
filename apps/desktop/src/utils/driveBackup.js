@@ -20,6 +20,14 @@ export const BACKUP_FOLDER = 'FlightSync Light';
 export const BACKUP_FILENAME = 'flightsync-light-backup.json';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
+// M6b: a corrupted/hostile Drive file (or a botched PATCH) shouldn't let
+// downloadBackup() buffer an unbounded response into memory as text. 50MB is
+// generously above any real flights/residence/settings JSON snapshot.
+export const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
+
+// M8: cap on any single OFP/boarding-pass blob restored from Drive.
+export const MAX_BLOB_BYTES = 20 * 1024 * 1024;
+
 async function requireToken() {
   const token = await ensureAccessToken();
   if (!token) throw new Error('Non authentifié Google');
@@ -177,13 +185,28 @@ export async function findBackup() {
   return fileId ? { fileId } : null;
 }
 
+function tooLargeError(bytes) {
+  const mb = (bytes / (1024 * 1024)).toFixed(1);
+  const capMb = MAX_BACKUP_BYTES / (1024 * 1024);
+  return new Error(`Sauvegarde trop volumineuse (${mb} Mo, max ${capMb} Mo)`);
+}
+
 export async function downloadBackup(fileId) {
   const token = await requireToken();
   const res = await fetch(`${DRIVE_API}/${fileId}?alt=media`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Drive download: HTTP ${res.status}`);
-  return res.text(); // validated by importValidation.parseBackupJson at the call site
+  // M6b: Drive's alt=media response carries Content-Length — check it BEFORE
+  // reading the body so a huge/hostile file never gets buffered into memory.
+  const declared = Number(res.headers?.get?.('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_BACKUP_BYTES) throw tooLargeError(declared);
+  const text = await res.text(); // validated by importValidation.parseBackupJson at the call site
+  // Fall back to the resolved text length when Content-Length was absent/unreliable.
+  if (!(Number.isFinite(declared) && declared > 0) && text.length > MAX_BACKUP_BYTES) {
+    throw tooLargeError(text.length);
+  }
+  return text;
 }
 
 async function downloadBytes(token, fileId) {
@@ -194,6 +217,41 @@ async function downloadBytes(token, fileId) {
   return new Uint8Array(await res.arrayBuffer());
 }
 
+// M8: byte-level content sniffing for restored blobs. A Drive folder is only
+// as trustworthy as the `drive.file` grant behind it — nothing stops a
+// tampered/foreign file from being dropped in under an expected name (e.g.
+// `ofp-<existingId>.pdf`) with arbitrary bytes. Before saving anything pulled
+// from Drive, check the magic number ourselves rather than trusting the
+// filename or Drive's reported mimeType (both attacker-controlled).
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46]; // %PDF
+const JPEG_MAGIC = [0xff, 0xd8, 0xff];
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47];
+
+function startsWith(bytes, magic) {
+  if (!bytes || bytes.length < magic.length) return false;
+  for (let i = 0; i < magic.length; i++) {
+    if (bytes[i] !== magic[i]) return false;
+  }
+  return true;
+}
+
+// Returns 'pdf' | 'jpeg' | 'png' | null based on the leading bytes only.
+export function sniffMagic(bytes) {
+  if (startsWith(bytes, PDF_MAGIC)) return 'pdf';
+  if (startsWith(bytes, JPEG_MAGIC)) return 'jpeg';
+  if (startsWith(bytes, PNG_MAGIC)) return 'png';
+  return null;
+}
+
+function isValidOfpBlob(bytes) {
+  return sniffMagic(bytes) === 'pdf' && bytes.length <= MAX_BLOB_BYTES;
+}
+
+function isValidBoardingPassBlob(bytes) {
+  const kind = sniffMagic(bytes);
+  return (kind === 'pdf' || kind === 'jpeg' || kind === 'png') && bytes.length <= MAX_BLOB_BYTES;
+}
+
 // Re-download the PDF mirror after a JSON restore (new-Mac scenario). OFP files
 // are named `ofp-${flightId}.pdf` (ofpFileName) and boarding passes
 // `bp-${date}-${n}.${ext}` (bpFileName); flight metadata for saveOFP comes from
@@ -202,10 +260,11 @@ async function downloadBytes(token, fileId) {
 export async function restoreBlobs(restoredFlights) {
   const token = await requireToken();
   const folderId = await findByName(token, BACKUP_FOLDER, { mimeType: FOLDER_MIME });
-  if (!folderId) return { ofps: 0, boardingPasses: 0 };
+  if (!folderId) return { ofps: 0, boardingPasses: 0, skipped: 0 };
   const byId = new Map((restoredFlights || []).map((f) => [f.id, f]));
   let ofps = 0;
   let boardingPasses = 0;
+  let skipped = 0;
 
   const ofpFolder = await findByName(token, 'ofps', { parentId: folderId, mimeType: FOLDER_MIME });
   if (ofpFolder) {
@@ -215,6 +274,7 @@ export async function restoreBlobs(restoredFlights) {
       const flight = byId.get(flightId);
       if (!flight) continue; // blob without a restored flight row — leave it on Drive
       const bytes = await downloadBytes(token, file.id);
+      if (!isValidOfpBlob(bytes)) { skipped++; continue; } // M8: not a real/oversized PDF — never overwrite a real OFP
       await saveOFP(flightId, {
         date: flight.date,
         flightNumber: flight.flightNumber,
@@ -247,6 +307,7 @@ export async function restoreBlobs(restoredFlights) {
       }
       if (existingNames.has(file.name)) continue; // already restored for this date
       const bytes = await downloadBytes(token, file.id);
+      if (!isValidBoardingPassBlob(bytes)) { skipped++; continue; } // M8: not a real/oversized PDF/JPEG/PNG
       const mime = file.mimeType || 'application/octet-stream';
       // saveBoardingPass takes (date, File) — reconstruct a File from the bytes.
       await saveBoardingPass(date, new File([bytes], file.name, { type: mime }));
@@ -254,5 +315,20 @@ export async function restoreBlobs(restoredFlights) {
       boardingPasses++;
     }
   }
-  return { ofps, boardingPasses };
+  return { ofps, boardingPasses, skipped };
+}
+
+// M6a: persist the restored JSON to storage BEFORE the caller touches React
+// state. Extracted as a standalone function (rather than inlined in App.jsx's
+// restoreFromDrive) so the ordering itself is unit-testable without mounting
+// the whole app: if any storage.set here throws (e.g. QuotaExceededError),
+// the caller's setFlights/setResidence/setSettings must never run — otherwise
+// the UI shows unpersisted data that silently reverts on next launch.
+// `keys` is the caller's STORAGE_KEYS shape ({ FLIGHTS, RESIDENCE, SETTINGS }).
+export async function persistRestoreData(storage, keys, { flights, residence, settings }) {
+  await storage.set(keys.FLIGHTS, JSON.stringify(flights));
+  await storage.set(keys.RESIDENCE, JSON.stringify(residence));
+  if (settings) {
+    await storage.set(keys.SETTINGS, JSON.stringify(settings));
+  }
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import './App.css';
 import { exportICS } from './utils/icsExport';
-import { runBackup, findBackup, downloadBackup, restoreBlobs, BACKUP_FILENAME } from './utils/driveBackup';
+import { runBackup, findBackup, downloadBackup, restoreBlobs, persistRestoreData, BACKUP_FILENAME } from './utils/driveBackup';
 import { runFolderBackup, restoreFolderBlobs, ensureFolderAccess } from './utils/folderBackup';
 import { tallyResidence } from './utils/residence';
 import { selectDisplayData, archiveYearList, adjacentYear } from './utils/archiveView';
@@ -45,6 +45,11 @@ const STORAGE_KEYS = {
   SETTINGS: "ac-sync-settings",
   SYNC_LOG: "ac-sync-log",
   DEVICE_ID: "ac-device-id",
+  // M7a: pre-restore snapshot of whatever was on disk right before a Drive
+  // restore overwrote it — recovery net for a mistaken restore. Not surfaced
+  // in any UI yet (no one-click-undo); it's a safety net a pilot/dev can pull
+  // out of localStorage by hand until that follow-up ships.
+  RESTORE_UNDO: "ac-restore-undo",
 };
 
 const SYNC_VERSION = "2.0.0";
@@ -403,7 +408,23 @@ export default function FlightSyncSystem() {
   // Restore REPLACES local data with the Drive snapshot. parseBackupJson throws
   // (returns { error }) on corrupt/foreign JSON BEFORE we touch local state, so
   // a bad download can't wipe the user's data. Mirrors executeImport's replace
-  // persistence flow (setFlights/setResidence + storage.set), plus settings.
+  // persistence flow, plus settings.
+  //
+  // M6/M7/M8 hardening:
+  //  - M6a: persist FIRST, then setState. If a storage.set throws partway
+  //    (e.g. QuotaExceededError), in-memory state must never race ahead of
+  //    disk — that silent mismatch would revert on the next launch. All
+  //    writes go through persistRestoreData() (driveBackup.js) before any
+  //    setFlights/setResidence/setSettings call; on failure we notify and
+  //    bail out without touching React state.
+  //  - M7a: snapshot whatever is CURRENTLY on disk under
+  //    STORAGE_KEYS.RESTORE_UNDO before it gets overwritten, so a mistaken
+  //    restore is recoverable. (Best-effort — a snapshot hiccup must not
+  //    block a restore the pilot explicitly asked for. No one-click-undo UI
+  //    yet; that's a follow-up.)
+  //  - M8: restoreBlobs() now sniffs magic numbers before saving downloaded
+  //    OFP/boarding-pass bytes, so a tampered Drive folder can't overwrite a
+  //    real file with arbitrary bytes; skipped counts are surfaced here.
   const restoreFromDrive = useCallback(async (fileId) => {
     const text = await downloadBackup(fileId);
     const { preview, error } = parseBackupJson(text);
@@ -411,23 +432,46 @@ export default function FlightSyncSystem() {
     const incoming = preview.data.data; // { flights, residence, settings? }
     const nextFlights = Array.isArray(incoming.flights) ? incoming.flights : [];
     const nextResidence = Array.isArray(incoming.residence) ? incoming.residence : [];
+    const nextSettings = (incoming.settings && typeof incoming.settings === 'object')
+      ? { ...settings, ...incoming.settings }
+      : null;
+
+    try {
+      const safeParse = (raw) => { try { return raw ? JSON.parse(raw) : []; } catch { return []; } };
+      const currentFlights = await storage.get(STORAGE_KEYS.FLIGHTS);
+      const currentResidence = await storage.get(STORAGE_KEYS.RESIDENCE);
+      await storage.set(STORAGE_KEYS.RESTORE_UNDO, JSON.stringify({
+        savedAt: now(),
+        flights: safeParse(currentFlights?.value),
+        residence: safeParse(currentResidence?.value),
+      }));
+    } catch { /* undo snapshot is best-effort; never blocks the restore itself */ }
+
+    try {
+      await persistRestoreData(storage, STORAGE_KEYS, {
+        flights: nextFlights, residence: nextResidence, settings: nextSettings,
+      });
+    } catch (err) {
+      notify(`Restauration annulée : stockage insuffisant (${err.message})`, 'error');
+      return;
+    }
 
     setFlights(nextFlights);
     setResidence(nextResidence);
-    await storage.set(STORAGE_KEYS.FLIGHTS, JSON.stringify(nextFlights));
-    await storage.set(STORAGE_KEYS.RESIDENCE, JSON.stringify(nextResidence));
-    if (incoming.settings && typeof incoming.settings === 'object') {
-      const nextSettings = { ...settings, ...incoming.settings };
-      setSettings(nextSettings);
-      await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings));
-    }
+    if (nextSettings) setSettings(nextSettings);
     notify('Données restaurées depuis Google Drive', 'success');
 
     // Re-download the PDF mirror (OFPs / boarding passes). A blob failure here
     // doesn't undo the JSON restore — the flights/residence are already in place.
     try {
-      const { ofps, boardingPasses } = await restoreBlobs(nextFlights);
-      if (ofps || boardingPasses) notify(`${ofps} OFP et ${boardingPasses} cartes récupérés`, 'success');
+      const { ofps, boardingPasses, skipped } = await restoreBlobs(nextFlights);
+      const skippedNote = skipped ? ` · ${skipped} ignoré(s) (format invalide)` : '';
+      if (ofps || boardingPasses || skipped) {
+        // 'error' when everything that came off Drive was rejected by the M8
+        // content check (nothing actually recovered) — otherwise a partial
+        // or full success, even if some files were skipped along the way.
+        notify(`${ofps} OFP et ${boardingPasses} cartes récupérés${skippedNote}`, (ofps || boardingPasses) ? 'success' : 'error');
+      }
       await refreshOFPIds();
       await refreshBoardingPassDates();
     } catch (err) {
@@ -1378,7 +1422,7 @@ export default function FlightSyncSystem() {
       <ConfirmModal
         open={!!restoreOffer}
         title="Sauvegarde trouvée sur Google Drive"
-        message="Une sauvegarde FlightSync Light existe sur ce compte Google. Restaurer les données sur ce Mac ?"
+        message="Restaurer va REMPLACER les vols et jours de résidence de ce Mac par le contenu de la sauvegarde Google Drive. Un instantané des données actuelles est conservé localement avant l'écrasement, mais il n'y a pas encore de bouton d'annulation en un clic."
         confirmLabel="Restaurer"
         cancelLabel="Plus tard"
         onConfirm={() => {
