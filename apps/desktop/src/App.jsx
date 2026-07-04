@@ -517,12 +517,17 @@ export default function FlightSyncSystem() {
     if (typeof folder === 'string' && folder) {
       // Grant the fs plugin's runtime scope access to exactly this folder
       // (audit H1 — no static fs:scope-* is granted any more) before it's
-      // saved/used anywhere else.
-      await ensureFolderAccess(folder);
-      const newSettings = { ...settings, backupFolder: folder };
-      setSettings(newSettings);
-      await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
-      notify('Dossier de sauvegarde configuré', 'success');
+      // saved/used anywhere else. If the grant fails, don't persist a folder
+      // the app can't actually read/write — surface the failure instead.
+      try {
+        await ensureFolderAccess(folder);
+        const newSettings = { ...settings, backupFolder: folder };
+        setSettings(newSettings);
+        await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+        notify('Dossier de sauvegarde configuré', 'success');
+      } catch (err) {
+        notify(`Impossible d'autoriser l'accès au dossier : ${err.message}`, 'error');
+      }
     }
   };
 
