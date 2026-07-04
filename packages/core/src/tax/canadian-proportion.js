@@ -14,8 +14,11 @@ import { getResidenceRule } from './residence-rules.js';
  * @returns {{ totalHours: number, canadianHours: number, canadianTimePct: string }}
  */
 export function computeAllTimeSummary(flights) {
-  const totalHours = flights.reduce((sum, f) => sum + (f.totalTime || 0), 0);
-  const canadianHours = flights.reduce((sum, f) => sum + (f.canadianTime || 0), 0);
+  // Defense-in-depth: reject non-finite values (NaN/Infinity) rather than
+  // relying on `||` falsy-coercion, so a stray corrupted stored flight can't
+  // silently distort the aggregate (see H5).
+  const totalHours = flights.reduce((sum, f) => sum + (Number.isFinite(f.totalTime) ? f.totalTime : 0), 0);
+  const canadianHours = flights.reduce((sum, f) => sum + (Number.isFinite(f.canadianTime) ? f.canadianTime : 0), 0);
   // Per ARC, Canadian proportion is time-based (time over Canadian airspace / total time). Distance is shown alongside for comparison.
   const canadianTimePct = totalHours > 0 ? ((canadianHours / totalHours) * 100).toFixed(1) : 0;
   return { totalHours, canadianHours, canadianTimePct };
@@ -46,10 +49,13 @@ export function computeFiscalYear(flights, year, province) {
   }
 
   const flightsThisYear = flights.filter((f) => f.date && f.date.startsWith(`${year}-`));
-  const yTotalHours = flightsThisYear.reduce((sum, f) => sum + (f.totalTime || 0), 0);
-  const yCanadianHours = flightsThisYear.reduce((sum, f) => sum + (f.canadianTime || 0), 0);
-  const yTotalDistance = flightsThisYear.reduce((sum, f) => sum + (f.distance || 0), 0);
-  const yCanadianDistance = flightsThisYear.reduce((sum, f) => sum + (f.canadianDistance || 0), 0);
+  // Defense-in-depth: reject non-finite values (NaN/Infinity) rather than
+  // relying on `||` falsy-coercion, so a stray corrupted stored flight can't
+  // silently distort the aggregate (see H5).
+  const yTotalHours = flightsThisYear.reduce((sum, f) => sum + (Number.isFinite(f.totalTime) ? f.totalTime : 0), 0);
+  const yCanadianHours = flightsThisYear.reduce((sum, f) => sum + (Number.isFinite(f.canadianTime) ? f.canadianTime : 0), 0);
+  const yTotalDistance = flightsThisYear.reduce((sum, f) => sum + (Number.isFinite(f.distance) ? f.distance : 0), 0);
+  const yCanadianDistance = flightsThisYear.reduce((sum, f) => sum + (Number.isFinite(f.canadianDistance) ? f.canadianDistance : 0), 0);
   const yCanadianTimePct = yTotalHours > 0 ? ((yCanadianHours / yTotalHours) * 100).toFixed(1) : 0;
   const yCanadianPct = yTotalDistance > 0 ? ((yCanadianDistance / yTotalDistance) * 100).toFixed(1) : 0;
 

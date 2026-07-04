@@ -63,6 +63,22 @@ describe('computeAllTimeSummary (synthetic)', () => {
     const result = computeAllTimeSummary([{ totalTime: 0, canadianTime: 0 }]);
     expect(result.canadianTimePct).toBe(0);
   });
+
+  // H5 defense-in-depth: a corrupted stored flight (e.g. from a near-antipodal
+  // geo bug) must not distort the aggregate. Note: `(f.x || 0)` already
+  // coerces a plain NaN to 0 (NaN is falsy), so the field that actually slips
+  // through the old `||` guard is Infinity (truthy) — the case a
+  // `Number.isFinite` check is meant to catch.
+  it('treats a non-finite (Infinity) canadianTime as 0 instead of propagating it into the aggregate', () => {
+    const flights = [
+      { totalTime: 10.0, canadianTime: Infinity },
+      { totalTime: 5.0, canadianTime: 2.0 },
+    ];
+    const result = computeAllTimeSummary(flights);
+    expect(result.totalHours).toBe(15.0);
+    expect(result.canadianHours).toBe(2.0);
+    expect(result.canadianTimePct).toBe('13.3');
+  });
 });
 
 // ─── computeFiscalYear ───────────────────────────────────────────────────────
@@ -130,5 +146,22 @@ describe('computeFiscalYear (synthetic)', () => {
   it('throws when an invalid province is passed', () => {
     const flights = [];
     expect(() => computeFiscalYear(flights, 2025, 'XX')).toThrow(/Unknown province/);
+  });
+
+  // H5 defense-in-depth (same rationale as computeAllTimeSummary): a
+  // non-finite canadianTime/canadianDistance on one stored flight must not
+  // distort the year's aggregate.
+  it('treats non-finite (Infinity) canadianTime/canadianDistance as 0 instead of propagating them', () => {
+    const flights = [
+      { date: '2025-02-01', totalTime: 10.0, canadianTime: Infinity, distance: 1000, canadianDistance: Infinity },
+      { date: '2025-03-01', totalTime: 5.0, canadianTime: 2.0, distance: 500, canadianDistance: 100 },
+    ];
+    const result = computeFiscalYear(flights, 2025);
+    expect(result.totalHours).toBe(15.0);
+    expect(result.canadianHours).toBe(2.0);
+    expect(result.totalDistance).toBe(1500);
+    expect(result.canadianDistance).toBe(100);
+    expect(result.canadianTimePct).toBe('13.3');
+    expect(result.canadianPct).toBe('6.7');
   });
 });
