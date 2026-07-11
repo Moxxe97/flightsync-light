@@ -170,6 +170,17 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
       const file = summaryFiles[0];
       try {
         const parsed = await parseFlightSummary(file);
+        // Parser warnings flag rows that were skipped or a layout drift — the
+        // reconciliation under-counts silently if they stay in the console.
+        if (parsed.warnings?.length) {
+          console.warn('[summary] avertissements:', parsed.warnings);
+          const layoutDrift = parsed.warnings.some(w => /segments detected/.test(w));
+          notify(
+            `Sommaire : ${parsed.warnings.length} avertissement(s) — ${parsed.warnings[0]}` +
+            (parsed.warnings.length > 1 ? ' (détails en console)' : ''),
+            layoutDrift ? 'error' : 'info',
+          );
+        }
         const flownOnly = parsed.flights.filter(f => f.flightType === 'flown');
         if (flownOnly.length === 0) {
           notify('Sommaire reconnu mais aucun vol trouvé.', 'info');

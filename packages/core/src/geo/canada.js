@@ -2,6 +2,10 @@
 
 export const CANADIAN_IATA = new Set([
   'YUL','YVR','YYZ','YOW','YYC','YEG','YHZ','YWG','YQB','YXE','YYT',
+  // AC regional network — every Canadian airport in data/icao-iata.js, so a
+  // stored flight always classifies as Canadian regardless of which station
+  // it touched (residence + domestic-leg logic depend on this set).
+  'YQM','YFC','YYG','YDF','YQR','YXU','YQT','YYJ','YLW','YXY','YZF',
 ]);
 
 // [lon, lat] pairs — simplified boundary of Canadian sovereign territory.

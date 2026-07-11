@@ -24,7 +24,7 @@ import MobileHomeMenu from './components/MobileHomeMenu';
 import MobileSectionHeader from './components/MobileSectionHeader';
 import { now, formatDate, timeSince } from '@flightsync/core/util';
 import { mergeImportedFlights } from '@flightsync/core/parsing/merge-flights';
-import { processPdfFile } from '@flightsync/core/parsing';
+import { processPdfFile, normalizeFlightAirports } from '@flightsync/core/parsing';
 import { rescoreAllFromOfps } from './utils/rescoreOfps';
 import HistoryTab from './components/tabs/HistoryTab';
 import ArchiveTab from './components/tabs/ArchiveTab';
@@ -343,10 +343,22 @@ export default function FlightSyncSystem() {
         }
       };
 
-      const flightsData = sanitizeStoredRows(await safeGet(STORAGE_KEYS.FLIGHTS));
+      let flightsData = sanitizeStoredRows(await safeGet(STORAGE_KEYS.FLIGHTS));
       const residenceData = sanitizeStoredRows(await safeGet(STORAGE_KEYS.RESIDENCE));
       const settingsData = (await safeGet(STORAGE_KEYS.SETTINGS)) || {};
       const logData = (await safeGet(STORAGE_KEYS.SYNC_LOG)) || [];
+
+      // Repair flights stored with raw ICAO codes (LIRN, EGPH, …) by
+      // pre-0.1.4 OFP imports. Idempotent; the corrected codes are persisted
+      // so summaries, route history and Canada classification all speak IATA
+      // again. The next Drive auto-backup picks them up.
+      const { flights: normalizedFlights, changed: normChanged } =
+        normalizeFlightAirports(flightsData);
+      if (normChanged.length) {
+        flightsData = normalizedFlights;
+        await storage.set(STORAGE_KEYS.FLIGHTS, JSON.stringify(flightsData));
+        console.info(`[migrate] ${normChanged.length} vol(s) normalisés ICAO→IATA`);
+      }
 
       setFlights(flightsData);
       // Calendrier Fiscal residency is sourced from Google Calendar pull, not local flights.
@@ -430,7 +442,11 @@ export default function FlightSyncSystem() {
     const { preview, error } = parseBackupJson(text);
     if (error) throw new Error(error);
     const incoming = preview.data.data; // { flights, residence, settings? }
-    const nextFlights = Array.isArray(incoming.flights) ? incoming.flights : [];
+    // A backup made before 0.1.4 can carry raw ICAO codes — normalize on the
+    // way in so a restore never reinstates un-normalized rows for the session.
+    const nextFlights = normalizeFlightAirports(
+      Array.isArray(incoming.flights) ? incoming.flights : []
+    ).flights;
     const nextResidence = Array.isArray(incoming.residence) ? incoming.residence : [];
     const nextSettings = (incoming.settings && typeof incoming.settings === 'object')
       ? { ...settings, ...incoming.settings }
@@ -823,13 +839,17 @@ export default function FlightSyncSystem() {
     const incoming = importPreview.data.data;
     const timestamp = now();
 
+    // A backup taken before 0.1.4 can carry raw ICAO codes — normalize on the
+    // way in so a restore never reinstates un-normalized rows.
+    const incomingFlights = normalizeFlightAirports(incoming.flights || []).flights;
+
     let finalFlights, finalResidence;
     if (strategy === "replace") {
-      finalFlights = incoming.flights || [];
+      finalFlights = incomingFlights;
       finalResidence = incoming.residence || [];
     } else {
       const existingKeys = new Set(flights.map((f) => `${f.date}-${f.flightNumber}`));
-      const newFlights = (incoming.flights || [])
+      const newFlights = incomingFlights
         .filter((f) => !existingKeys.has(`${f.date}-${f.flightNumber}`))
         .map((f) => ({ ...f, _lastModified: timestamp, _deviceId: deviceId }));
       finalFlights = [...flights, ...newFlights];

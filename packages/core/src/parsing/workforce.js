@@ -13,10 +13,20 @@ const MONTH_NAMES = [
 // Row format from real pdfjs extraction of WorkForce monthly summary PDFs:
 //   "<STA_date> <STA_time> <STD_date> <STD_time> <ATA_date> <ATA_time> <ATD_date> <ATD_time>
 //    (Flown Flight Leg|DeadHead Flown) [pairing] <flight#> <origin> <dest>
-//    <PaidMinDay> <PaidMinNight> [Y|N OVS NAV] <Roles> <FltDt> <FltMinDay> <FltMinNight>"
+//    <PaidMinDay> <PaidMinNight> [Y|N OVS NAV] [Roles] <FltDt> <FltMinDay> <FltMinNight>"
 // Pairing and OVS NAV flag appear only on Flown rows. Block time comes from the
 // trailing FltMinDay+FltMinNight columns (the airline's authoritative TZ-correct
 // value, not from subtracting wall-clock ATD/ATA which crosses timezones).
+//
+// Roles is OPTIONAL and bounded: reserve months print "RSV Award" there, but
+// blockholder months leave it empty ("… 0.0 480.0 Y 06/03/2026 …"). When the
+// group required ≥1 token it swallowed the FltDt and everything up to the NEXT
+// date in the document — consuming the following row(s) whole, mis-dating the
+// leg and silently dropping its return. The lookahead forbids the group from
+// ever crossing another row's type anchor OR any date: real Roles values never
+// contain dates, so this also stops a malformed/truncated row from stitching a
+// later row's FltDt/FltMin into itself via backtracking — such a row simply
+// fails to match and the anchor cross-check below reports it.
 const ROW_RE = new RegExp(
   '(\\d{2}/\\d{2}/\\d{4})\\s+(\\d{1,2}:\\d{2})\\s+' +    // STA date, time
   '(\\d{2}/\\d{2}/\\d{4})\\s+(\\d{1,2}:\\d{2})\\s+' +    // STD date, time
@@ -28,7 +38,7 @@ const ROW_RE = new RegExp(
   '([A-Z]{3})\\s+([A-Z]{3})\\s+' +                       // origin, dest
   '([\\d.]+)\\s+([\\d.]+)\\s+' +                         // Paid Min Day, Paid Min Night
   '(?:[YN]\\s+)?' +                                      // optional OVS NAV
-  '(.+?)\\s+' +                                          // Roles (lazy)
+  '(?:((?:(?!Flown Flight Leg|DeadHead Flown|\\d{2}/\\d{2}/\\d{4}).)+?)\\s+)??' + // Roles (optional, row- and date-bounded)
   '(\\d{2}/\\d{2}/\\d{4})\\s+' +                         // Flt Dt
   '([\\d.]+)\\s+([\\d.]+)',                              // Flt Min Day, Flt Min Night
   'g',
@@ -92,6 +102,7 @@ export function parseFlightSummaryText(text) {
 
   const flights = [];
   const warnings = [];
+  let skipped = 0;
 
   for (const match of text.matchAll(ROW_RE)) {
     const [
@@ -104,6 +115,22 @@ export function parseFlightSummaryText(text) {
     const flightType = type === 'DeadHead Flown' ? 'deadhead' : 'flown';
     const pairing = pairingRaw ?? '';
     const fleet = detectFleet(text, match.index);
+
+    // A row's FltDt is its local departure date — always the ATD date or an
+    // adjacent day. A bigger gap means the regex latched onto a date belonging
+    // to ANOTHER row (the failure mode the Roles bound above prevents); refuse
+    // the row rather than import a mis-dated flight.
+    const fltDtGapDays = Math.abs(
+      Date.parse(mmddyyyyToIso(fltDate)) - Date.parse(mmddyyyyToIso(atdDate))
+    ) / 86_400_000;
+    if (fltDtGapDays > 3) {
+      warnings.push(
+        `${normalizeFlightNumber(rawFltNum)}: Flt Dt ${mmddyyyyToIso(fltDate)} is ${fltDtGapDays} days ` +
+        `from its ATD date ${mmddyyyyToIso(atdDate)} — row misaligned, skipped`
+      );
+      skipped++;
+      continue;
+    }
 
     const atdUtc = localToUtc(atdDate, atdTime, origin);
     const ataUtc = localToUtc(ataDate, ataTime, dest);
@@ -131,6 +158,7 @@ export function parseFlightSummaryText(text) {
     if (flightType === 'flown' &&
         (!Number.isFinite(blockMinutes) || blockMinutes <= 0 || blockMinutes > 24 * 60)) {
       warnings.push(`Row with implausible block time (${blockMinutes} min) for ${rawFltNum} on ${fltDate}`);
+      skipped++;
       continue;
     }
 
@@ -167,9 +195,31 @@ export function parseFlightSummaryText(text) {
     });
   }
 
+  // Every data row carries exactly one type anchor. If anchors outnumber the
+  // rows we parsed or knowingly skipped, the layout has drifted and legs were
+  // lost SILENTLY — say so instead of letting the reconciliation under-count.
+  const anchorCount = (text.match(/Flown Flight Leg|DeadHead Flown/g) ?? []).length;
+  if (anchorCount !== flights.length + skipped) {
+    warnings.push(
+      `${anchorCount} flight segments detected but ${flights.length + skipped} parsed — ` +
+      'summary layout may have changed; some legs may be missing'
+    );
+  }
+
   const month = detectMonth(text);
   if (!month) warnings.push('Could not detect report month from header');
   const documentTotals = parseDocumentTotals(text);
+
+  // Anchor-independent backstop: the cross-check above is blind if the anchor
+  // PHRASE itself drifts ("Flown flight Leg") — then anchors AND rows are both
+  // zero. Non-zero document totals with nothing parsed can't be a quiet month.
+  if (flights.length === 0 && skipped === 0 && (documentTotals.grandFltMinutes ?? 0) > 0) {
+    warnings.push(
+      'Document totals show flying minutes but no rows were parsed — ' +
+      'summary layout may have changed'
+    );
+  }
+
   return { month, flights, documentTotals, warnings };
 }
 

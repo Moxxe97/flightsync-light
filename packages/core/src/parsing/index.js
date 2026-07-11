@@ -3,3 +3,4 @@ export { setPdfTextAdapter, pdfToText, _resetPdfTextAdapter } from './pdf-text.j
 export { parseOfp, processPdfFile } from './ofp.js';
 export { rescoreFlight } from './rescore.js';
 export { parseFlightSummary, parseFlightSummaryText, localToUtc, SUMMARY_HEADER } from './workforce.js';
+export { normalizeFlightAirports } from './normalize-airports.js';
