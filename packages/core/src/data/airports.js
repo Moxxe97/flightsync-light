@@ -1,5 +1,5 @@
 // IATA → { lat, lon } in decimal degrees. Source: airport reference points.
-// Covers every airport appearing in ICAO_TO_IATA in parsePdf.js.
+// Covers every airport appearing in data/icao-iata.js (parity-tested).
 export const AIRPORTS = {
   // Canada
   YUL: { lat: 45.47, lon:  -73.74 },
@@ -13,6 +13,17 @@ export const AIRPORTS = {
   YQB: { lat: 46.79, lon:  -71.39 },
   YXE: { lat: 52.17, lon: -106.70 },
   YYT: { lat: 47.62, lon:  -52.75 },
+  YQM: { lat: 46.11, lon:  -64.68 },
+  YFC: { lat: 45.87, lon:  -66.54 },
+  YYG: { lat: 46.29, lon:  -63.13 },
+  YDF: { lat: 49.21, lon:  -57.39 },
+  YQR: { lat: 50.43, lon: -104.67 },
+  YXU: { lat: 43.04, lon:  -81.15 },
+  YQT: { lat: 48.37, lon:  -89.32 },
+  YYJ: { lat: 48.65, lon: -123.43 },
+  YLW: { lat: 49.96, lon: -119.38 },
+  YXY: { lat: 60.71, lon: -135.07 },
+  YZF: { lat: 62.46, lon: -114.44 },
 
   // India
   DEL: { lat: 28.57, lon:   77.10 },
@@ -48,7 +59,13 @@ export const AIRPORTS = {
   FCO: { lat: 41.80, lon:   12.25 },
   MXP: { lat: 45.63, lon:    8.72 },
   VCE: { lat: 45.50, lon:   12.35 },
+  NAP: { lat: 40.88, lon:   14.29 },
   ATH: { lat: 37.94, lon:   23.95 },
+  EDI: { lat: 55.95, lon:   -3.37 },
+  DUB: { lat: 53.42, lon:   -6.27 },
+  WAW: { lat: 52.17, lon:   20.97 },
+  BUD: { lat: 47.44, lon:   19.26 },
+  PRG: { lat: 50.10, lon:   14.26 },
 
   // MENA / Africa
   DXB: { lat: 25.25, lon:   55.36 },
@@ -56,6 +73,8 @@ export const AIRPORTS = {
   DOH: { lat: 25.27, lon:   51.61 },
   CAI: { lat: 30.11, lon:   31.41 },
   JNB: { lat: -26.14, lon:  28.25 },
+  CMN: { lat: 33.37, lon:   -7.59 },
+  TLV: { lat: 32.01, lon:   34.89 },
 
   // Asia / Pacific
   HKG: { lat: 22.31, lon:  113.92 },
@@ -80,6 +99,14 @@ export const AIRPORTS = {
   VRA: { lat: 23.03, lon:  -81.44 },
   SDQ: { lat: 18.43, lon:  -69.67 },
   PUJ: { lat: 18.57, lon:  -68.36 },
+  MBJ: { lat: 18.50, lon:  -77.91 },
+  BGI: { lat: 13.07, lon:  -59.49 },
+  HAV: { lat: 22.99, lon:  -82.41 },
+  PVR: { lat: 20.68, lon: -105.25 },
+  SJD: { lat: 23.15, lon: -109.72 },
+  AUA: { lat: 12.50, lon:  -70.02 },
+  GRU: { lat: -23.44, lon: -46.47 },
+  SCL: { lat: -33.39, lon: -70.79 },
 
   // USA
   ORD: { lat: 41.98, lon:  -87.90 },
@@ -94,4 +121,10 @@ export const AIRPORTS = {
   IAD: { lat: 38.94, lon:  -77.46 },
   DEN: { lat: 39.86, lon: -104.67 },
   SEA: { lat: 47.45, lon: -122.31 },
+  LAS: { lat: 36.08, lon: -115.15 },
+  MCO: { lat: 28.43, lon:  -81.31 },
+  FLL: { lat: 26.07, lon:  -80.15 },
+  TPA: { lat: 27.98, lon:  -82.53 },
+  PHX: { lat: 33.43, lon: -112.01 },
+  SAN: { lat: 32.73, lon: -117.19 },
 };

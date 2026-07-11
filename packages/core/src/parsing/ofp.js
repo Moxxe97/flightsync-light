@@ -1,28 +1,8 @@
 import { pdfToText } from './pdf-text.js';
 import { CANADIAN_IATA, greatCircleCanadianFraction, haversineDistance } from '../geo/index.js';
+import { ICAO_TO_IATA, toIata } from '../data/icao-iata.js';
 
 // ─── Constants ────────────────────────────────────────────────
-const ICAO_TO_IATA = {
-  CYUL:'YUL', CYVR:'YVR', CYYZ:'YYZ', CYOW:'YOW', CYYC:'YYC',
-  CYEG:'YEG', CYHZ:'YHZ', CYWG:'YWG', CYQB:'YQB', CYXE:'YXE',
-  VIDP:'DEL', VABB:'BOM', VOMM:'MAA', VOBL:'BLR', VOCI:'COK',
-  LFPG:'CDG', LFPO:'ORY', LFBO:'TLS', LFLL:'LYS', LFMN:'NCE',
-  EGLL:'LHR', EGKK:'LGW', EGSS:'STN', EGCC:'MAN',
-  EDDF:'FRA', EDDM:'MUC', EDDB:'BER', LSZH:'ZRH', LSGG:'GVA', LOWW:'VIE',
-  EHAM:'AMS', EBBR:'BRU', ENGM:'OSL', EKCH:'CPH', ESSA:'ARN',
-  LEMD:'MAD', LEBL:'BCN', LPPT:'LIS', LIRF:'FCO', LIMC:'MXP',
-  LIPZ:'VCE', LGAV:'ATH',
-  OMDB:'DXB', OERK:'RUH', OTHH:'DOH', HECA:'CAI', FAOR:'JNB',
-  VHHH:'HKG', RCTP:'TPE', RJAA:'NRT', RJTT:'HND', RJBB:'KIX',
-  RKSI:'ICN', WSSS:'SIN', VTBS:'BKK', WMKK:'KUL',
-  ZGGG:'CAN', ZBAA:'PEK', ZSPD:'PVG', YSSY:'SYD', YMML:'MEL',
-  MMUN:'CUN', MMMX:'MEX', MROC:'SJO', MUVR:'VRA', MDSD:'SDQ',
-  MDPC:'PUJ',
-  KORD:'ORD', KJFK:'JFK', KLAX:'LAX', KSFO:'SFO', KATL:'ATL',
-  KDFW:'DFW', KMIA:'MIA', KBOS:'BOS', KEWR:'EWR', KIAD:'IAD',
-  KDEN:'DEN', KSEA:'SEA',
-};
-
 const MONTHS = { JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12 };
 
 // ─── Cut Page Detection ───────────────────────────────────────
@@ -70,11 +50,7 @@ function hhmm(str) {
 }
 
 // ─── Airport Helper ───────────────────────────────────────────
-function resolve(code) {
-  if (!code) return '';
-  const u = code.toUpperCase().trim();
-  return ICAO_TO_IATA[u] ?? u;
-}
+const resolve = toIata;
 
 // Un OFP piégé peut produire des dizaines de milliers de "waypoints" fabriqués
 // dans la section FLIGHT LOG — bornes dures (audit M4). Un vrai journal de vol
@@ -221,11 +197,15 @@ export function parseOfp(text) {
     .sort();
 
   // ── 3. Route — AC OFP header format: "CYUL/YUL - VIDP/DEL" ──
-  const headerRoute = T.match(/([A-Z]{4})\/[A-Z]{3}\s*-\s*([A-Z]{4})\/[A-Z]{3}/);
+  // The header prints BOTH forms; take the IATA half directly instead of
+  // resolving the ICAO through a lookup table. Airports absent from the table
+  // (LIRN, EGPH, EIDW, …) used to be stored as raw 4-letter ICAO, which then
+  // never matched the 3-letter codes in monthly summaries or route history.
+  const headerRoute = T.match(/([A-Z]{4})\/([A-Z]{3})\s*-\s*([A-Z]{4})\/([A-Z]{3})/);
   let dep = '', arr = '';
   if (headerRoute) {
-    dep = resolve(headerRoute[1]);
-    arr = resolve(headerRoute[2]);
+    dep = headerRoute[2];
+    arr = headerRoute[4];
   } else {
     const generic = [...T.matchAll(/([A-Z]{3,4})\s*\/\s*([A-Z]{3,4})/g)];
     const known = new Set([...Object.keys(ICAO_TO_IATA), ...Object.values(ICAO_TO_IATA)]);
