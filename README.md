@@ -30,11 +30,17 @@ Toutes les données sont stockées **localement sur votre Mac** (localStorage + 
 
 ### Télécharger
 
-Rendez-vous dans l'onglet **Releases** de ce dépôt et téléchargez le fichier `.zip` de la dernière version. Décompressez-le et faites glisser `FlightSync Light.app` dans votre dossier **Applications**.
+Rendez-vous dans l'onglet **Releases** de ce dépôt et téléchargez le `.dmg` « universal » de la dernière version — compatible **Mac Intel et Apple Silicon** (macOS 13+). Ouvrez-le et faites glisser `FlightSync Light.app` dans votre dossier **Applications**. (Le `.zip` contient la même app.)
 
 ### Premier lancement — Gatekeeper
 
-L'application n'est pas signée par Apple (coût et processus administratif disproportionné pour un outil gratuit). macOS bloquera le premier lancement. Voici comment l'autoriser :
+L'application n'est pas signée par Apple (coût et processus administratif disproportionné pour un outil gratuit). macOS bloquera le premier lancement — et sur certains Mac **sans afficher le moindre message** : l'icône rebondit dans le Dock puis disparaît. La méthode la plus fiable, dans le **Terminal** :
+
+```
+xattr -dr com.apple.quarantine "/Applications/FlightSync Light.app"
+```
+
+puis ouvrez l'app normalement. Alternative sans Terminal (si macOS affiche bien le blocage) :
 
 1. Double-cliquez sur `FlightSync Light.app` → macOS affiche *« Impossible d'ouvrir… »*.
 2. Ouvrez **Réglages Système → Confidentialité et sécurité**.
@@ -42,7 +48,7 @@ L'application n'est pas signée par Apple (coût et processus administratif disp
 4. Cliquez sur **Ouvrir quand même**.
 5. Confirmez dans la boîte de dialogue qui s'affiche.
 
-Ce processus n'est requis qu'une seule fois. macOS se souvient de votre choix.
+Ce processus n'est requis qu'une seule fois **par Mac**. macOS se souvient de votre choix.
 
 > **Pourquoi non signé ?** La signature Apple coûte 99 USD/an et exige une inscription au programme développeur. Pour un outil gratuit et open source distribué directement, ce surcoût n'est pas justifié. Le code source est disponible ici pour audit.
 
@@ -84,7 +90,16 @@ pnpm install
 pnpm tauri:build
 ```
 
-L'exécutable signable se trouve dans `apps/desktop/src-tauri/target/release/bundle/macos/`.
+L'exécutable signable se trouve dans `apps/desktop/src-tauri/target/release/bundle/macos/` (architecture de la machine uniquement).
+
+Pour une version distribuable **universelle** (Intel + Apple Silicon) :
+
+```bash
+rustup target add x86_64-apple-darwin   # une seule fois
+pnpm --filter flight-sync-light-desktop exec tauri build --target universal-apple-darwin
+```
+
+Le bundle se trouve alors dans `apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/`.
 
 Pour le développement :
 

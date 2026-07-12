@@ -14,7 +14,8 @@ From repo root:
 - `pnpm install` — peer-dependency warnings (tailwindcss v4 / vite v8) are expected and harmless; pnpm 9 has no `--legacy-peer-deps` flag (that's npm).
 - `pnpm dev` — runs `vite` in `apps/desktop`.
 - `pnpm build:desktop` — vite build.
-- `pnpm tauri:build` — full Tauri bundle.
+- `pnpm tauri:build` — full Tauri bundle (host architecture only).
+- Distribution/release builds must be **universal**: `pnpm --filter flight-sync-light-desktop exec tauri build --target universal-apple-darwin` (one-time prereq: `rustup target add x86_64-apple-darwin`); bundle lands in `apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/`. aarch64-only builds bounce silently on Intel Macs (root-caused 2026-07-12).
 - `pnpm test` — recursive vitest across all workspaces.
 
 From `apps/desktop/`:

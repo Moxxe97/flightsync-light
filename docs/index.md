@@ -25,9 +25,9 @@ FlightSync Light vous permet d'importer vos OFP PDF directement depuis votre ord
 
 ## Télécharger
 
-Rendez-vous dans l'onglet [**Releases**](../../releases) de ce dépôt GitHub pour télécharger la dernière version.
+Rendez-vous dans l'onglet [**Releases**](../../releases) de ce dépôt GitHub pour télécharger la dernière version — compatible **Mac Intel et Apple Silicon** (macOS 13+).
 
-> **Premier lancement :** l'app n'est pas signée Apple (gratuite et open source). macOS vous demandera de l'autoriser via **Réglages Système → Confidentialité et sécurité → Ouvrir quand même**. Voir le README pour les instructions détaillées.
+> **Premier lancement :** l'app n'est pas signée Apple (gratuite et open source). Sur certains Mac, macOS bloque le lancement **sans message** (l'icône rebondit puis disparaît). Dans le Terminal : `xattr -dr com.apple.quarantine "/Applications/FlightSync Light.app"` — ou via **Réglages Système → Confidentialité et sécurité → Ouvrir quand même**. Voir le README pour les instructions détaillées.
 
 ---
 
