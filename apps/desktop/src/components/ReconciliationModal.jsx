@@ -1,24 +1,24 @@
 import { useMemo, useState } from 'react';
 import { useIsMobile } from '../utils/useIsMobile';
 
-// month string "2026-03" → "mars 2026" (French, matching app UI)
-const MONTH_LABELS_FR = [
-  '', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+// month string "2026-03" → "March 2026"
+const MONTH_LABELS = [
+  '', 'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 function monthLabel(month) {
-  if (!month) return 'mois inconnu';
+  if (!month) return 'unknown month';
   const [y, m] = month.split('-');
-  return `${MONTH_LABELS_FR[parseInt(m, 10)]} ${y}`;
+  return `${MONTH_LABELS[parseInt(m, 10)]} ${y}`;
 }
 
 function sourceBadge(source) {
   const map = {
-    'history-avg':  { label: 'moyenne route', bg: '#10b98122', fg: '#10b981', br: '#10b98144' },
-    'great-circle': { label: 'grand cercle',  bg: '#f59e0b22', fg: '#f59e0b', br: '#f59e0b44' },
-    'manual':       { label: 'manuel',        bg: '#63b3ed22', fg: '#63b3ed', br: '#63b3ed44' },
-    'unknown':      { label: 'inconnu',       bg: '#ef444422', fg: '#ef4444', br: '#ef444444' },
+    'history-avg':  { label: 'route average', bg: '#10b98122', fg: '#10b981', br: '#10b98144' },
+    'great-circle': { label: 'great circle',  bg: '#f59e0b22', fg: '#f59e0b', br: '#f59e0b44' },
+    'manual':       { label: 'manual',        bg: '#63b3ed22', fg: '#63b3ed', br: '#63b3ed44' },
+    'unknown':      { label: 'unknown',       bg: '#ef444422', fg: '#ef4444', br: '#ef444444' },
   };
   const s = map[source] || map.unknown;
   return (
@@ -31,7 +31,7 @@ function sourceBadge(source) {
 
 function shortDate(iso) {
   const [, m, d] = iso.split('-');
-  return `${d} ${MONTH_LABELS_FR[parseInt(m, 10)].slice(0, 3)}`;
+  return `${MONTH_LABELS[parseInt(m, 10)].slice(0, 3)} ${d}`;
 }
 
 /**
@@ -96,7 +96,7 @@ export default function ReconciliationModal({
           canadianTime,
           distance: r.distance,
           canadianDistance: r.canadianDistance,
-          notes: `Auto-ajouté depuis le sommaire ${monthLabel(month)} — source: ${r.source}`,
+          notes: `Auto-added from the ${monthLabel(month)} summary — source: ${r.source}`,
           _lastModified: timestamp,
           _deviceId: deviceId,
         };
@@ -110,10 +110,10 @@ export default function ReconciliationModal({
         <div style={modalShell}>
           <Header month={month} />
           <p style={{ color: '#94a3b8', fontSize: 13, margin: '0 0 16px' }}>
-            Aucun vol manquant — les {summaryCount} vols du sommaire sont déjà enregistrés.
+            No missing flights — all {summaryCount} flights in the summary are already logged.
           </p>
           <Footer>
-            <button onClick={onCancel} style={btnPrimary}>Fermer</button>
+            <button onClick={onCancel} style={btnPrimary}>Close</button>
           </Footer>
         </div>
       </Backdrop>
@@ -125,7 +125,7 @@ export default function ReconciliationModal({
       <div style={modalShell}>
         <Header month={month} />
         <p style={{ color: '#94a3b8', fontSize: 12, margin: '0 0 12px' }}>
-          {summaryCount} vols dans le sommaire · {matchedCount} déjà enregistrés · {missing.length} à ajouter
+          {summaryCount} flights in the summary · {matchedCount} already logged · {missing.length} to add
         </p>
         <div style={{ overflowY: 'auto', maxHeight: '50vh', border: '1px solid #1e2a45', borderRadius: 8 }}>
           {rows.map((r, i) => {
@@ -182,13 +182,13 @@ export default function ReconciliationModal({
           })}
         </div>
         <Footer>
-          <button onClick={onCancel} style={btnGhost}>Annuler</button>
+          <button onClick={onCancel} style={btnGhost}>Cancel</button>
           <button onClick={confirm} disabled={selectedCount === 0} style={{
             ...btnPrimary,
             opacity: selectedCount === 0 ? 0.4 : 1,
             cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
           }}>
-            Ajouter sélectionnés ({selectedCount})
+            Add selected ({selectedCount})
           </button>
         </Footer>
       </div>
@@ -199,7 +199,7 @@ export default function ReconciliationModal({
 function Header({ month }) {
   return (
     <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', margin: '0 0 6px' }}>
-      Réconciliation — {monthLabel(month)}
+      Reconciliation — {monthLabel(month)}
     </h3>
   );
 }

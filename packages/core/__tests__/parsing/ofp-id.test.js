@@ -30,7 +30,7 @@ describe('parseOfp leg cap (audit #25/G4)', () => {
     const text = `OFP ${nums.join(' ')} YUL CDG`;
     const result = parseOfp(text);
     expect(result.flights.length).toBeLessThanOrEqual(8);
-    expect(result.warning).toMatch(/limité/);
+    expect(result.warning).toMatch(/limited/);
   });
   it('does not warn at or below 8 legs', () => {
     const result = parseOfp('OFP AC0001 AC0002 YUL CDG');

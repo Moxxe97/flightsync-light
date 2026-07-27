@@ -29,12 +29,12 @@ function flightToICSEvent(flight) {
     ? ((flight.canadianDistance / flight.distance) * 100).toFixed(1)
     : '0';
   const description = icsEscape([
-    `Vol: ${flight.flightNumber}`,
+    `Flight: ${flight.flightNumber}`,
     `Route: ${flight.departure} → ${flight.arrival}`,
-    `Durée totale: ${flight.totalTime}h`,
-    `Temps canadien: ${flight.canadianTime}h (${canPct}%)`,
+    `Total duration: ${flight.totalTime}h`,
+    `Canadian time: ${flight.canadianTime}h (${canPct}%)`,
     `Distance GC: ${flight.distance || '?'} nm`,
-    `Distance canadienne: ${flight.canadianDistance || '?'} nm`,
+    `Canadian distance: ${flight.canadianDistance || '?'} nm`,
     flight.notes ? `Notes: ${flight.notes}` : '',
   ].filter(Boolean).join('\n'));
 

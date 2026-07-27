@@ -69,19 +69,19 @@ export default class ErrorBoundary extends Component {
             onClick={() => this.setState({ confirmingReset: true })}
             style={{ ...btnStyle, background: 'none', border: '1px solid #7f1d1d', color: '#fca5a5' }}
           >
-            Réinitialiser les données locales
+            Reset local data
           </button>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
             <p style={{ margin: 0, fontSize: 13, color: '#fca5a5', maxWidth: 420, textAlign: 'center' }}>
-              Action irréversible : efface les vols/résidence locaux (les archives et
-              plans de vol sont conservés). Vos données sont stockées localement sur ce Mac.
+              Irreversible action: erases local flights/residence data (archives and
+              flight plans are kept). Your data is stored locally on this Mac.
             </p>
             <button
               onClick={this.resetLocalData}
               style={{ ...btnStyle, background: '#7f1d1d', border: '1px solid #991b1b' }}
             >
-              Confirmer la réinitialisation
+              Confirm reset
             </button>
           </div>
         )}

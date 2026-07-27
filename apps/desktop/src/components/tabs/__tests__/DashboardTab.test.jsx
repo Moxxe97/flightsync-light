@@ -25,14 +25,14 @@ const baseProps = {
 describe('DashboardTab read-only gating', () => {
   it('hides the Actions Rapides row when readOnly but keeps the stats', () => {
     render(<DashboardTab {...baseProps} readOnly />);
-    expect(screen.queryByText('ACTIONS RAPIDES')).toBeNull();
-    expect(screen.queryByText('Sauvegarder sur Drive')).toBeNull();
-    expect(screen.getByText('VOLS ENREGISTRÉS')).toBeTruthy();
+    expect(screen.queryByText('QUICK ACTIONS')).toBeNull();
+    expect(screen.queryByText('Back up to Drive')).toBeNull();
+    expect(screen.getByText('FLIGHTS LOGGED')).toBeTruthy();
   });
 
   it('shows the Actions Rapides row when not readOnly', () => {
     render(<DashboardTab {...baseProps} />);
-    expect(screen.getByText('ACTIONS RAPIDES')).toBeTruthy();
+    expect(screen.getByText('QUICK ACTIONS')).toBeTruthy();
   });
 });
 
@@ -66,14 +66,14 @@ describe('DashboardTab card 1 — single auth UI contract', () => {
 
   it('signed-out: shows Backup-tab hint and NO sign-in button', () => {
     render(<DashboardTab {...emptyProps} authUser={null} />);
-    expect(screen.getByText('Connectez Google dans l\'onglet Backup')).toBeTruthy();
+    expect(screen.getByText('Connect Google in the Backup tab')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /connecter drive/i })).toBeNull();
   });
 
   it('signed-in: shows connected state and NO sign-in button', () => {
     const user = { email: 'test@example.com' };
     render(<DashboardTab {...emptyProps} authUser={user} />);
-    expect(screen.getByText('Connecté')).toBeTruthy();
+    expect(screen.getByText('Connected')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /connecter drive/i })).toBeNull();
   });
 });

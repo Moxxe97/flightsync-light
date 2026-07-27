@@ -293,7 +293,7 @@ describe('downloadYear', () => {
     stubYearJsonFetch({ year: '2025', flights: { evil: true }, residence: [], manifest: null, archivedAt: null, contentHash: 'deadbeef' });
     idb.saveArchiveYear.mockClear(); idb.saveOFP.mockClear(); idb.saveBoardingPass.mockClear();
 
-    await expect(downloadYear({ year: '2025', folderId: 'yf' })).rejects.toThrow(/invalide/);
+    await expect(downloadYear({ year: '2025', folderId: 'yf' })).rejects.toThrow(/invalid/);
     expect(idb.saveArchiveYear).not.toHaveBeenCalled();
     expect(idb.saveOFP).not.toHaveBeenCalled();
     expect(idb.saveBoardingPass).not.toHaveBeenCalled();

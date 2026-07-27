@@ -14,8 +14,8 @@ const baseProps = {
 describe('CalendarTab year rendering', () => {
   it('renders the given year in the header and all 12 months for a past year', () => {
     render(<CalendarTab {...baseProps} year={2024} />);
-    expect(screen.getByText('CALENDRIER FISCAL 2024')).toBeTruthy();
-    expect(screen.getByText('Décembre 2024')).toBeTruthy(); // 12th month present
+    expect(screen.getByText('FISCAL CALENDAR 2024')).toBeTruthy();
+    expect(screen.getByText('December 2024')).toBeTruthy(); // 12th month present
   });
 
   it('has no Google Calendar import button (GCal integration removed)', () => {
@@ -29,9 +29,9 @@ describe('CalendarTab year rendering', () => {
     ]} />);
     expect(screen.getByTitle('note sans couleur')).toBeTruthy(); // tooltip = the note
     // January card shows 0 tracked days, not 1
-    const janCard = screen.getByText('Janvier 2024').closest('.card');
-    // The span renders as "0/31 jours" but may be broken into text nodes; use a function matcher
-    expect(within(janCard).getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === '0/31 jours')).toBeTruthy();
-    expect(within(janCard).queryByText((_, el) => el?.tagName === 'SPAN' && el.textContent === '1/31 jours')).toBeNull();
+    const janCard = screen.getByText('January 2024').closest('.card');
+    // The span renders as "0/31 days" but may be broken into text nodes; use a function matcher
+    expect(within(janCard).getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === '0/31 days')).toBeTruthy();
+    expect(within(janCard).queryByText((_, el) => el?.tagName === 'SPAN' && el.textContent === '1/31 days')).toBeNull();
   });
 });

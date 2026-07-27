@@ -56,7 +56,7 @@ const IconEdit = () => (
 // Confidence badge
 function ConfBadge({ score }) {
   const color = score >= 75 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
-  const label = score >= 75 ? 'Bon' : score >= 50 ? 'Moyen' : 'Faible';
+  const label = score >= 75 ? 'Good' : score >= 50 ? 'Fair' : 'Low';
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 3,
@@ -105,7 +105,7 @@ function EditCell({ value, onChange, mono, width, placeholder }) {
         color: value ? '#e2e8f0' : '#475569',
         borderBottom: '1px dashed #2d3748', paddingBottom: 1,
       }}
-      title="Cliquer pour modifier"
+      title="Click to edit"
     >
       {value || placeholder || '—'}
       <span style={{ opacity: 0.4, flexShrink: 0 }}><IconEdit /></span>
@@ -143,7 +143,7 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
   const processFiles = useCallback(async (fileList) => {
     const pdfs = Array.from(fileList).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
     if (pdfs.length === 0) {
-      notify('Aucun fichier PDF sélectionné.', 'error');
+      notify('No PDF file selected.', 'error');
       return;
     }
 
@@ -173,17 +173,17 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
         // Parser warnings flag rows that were skipped or a layout drift — the
         // reconciliation under-counts silently if they stay in the console.
         if (parsed.warnings?.length) {
-          console.warn('[summary] avertissements:', parsed.warnings);
+          console.warn('[summary] warnings:', parsed.warnings);
           const layoutDrift = parsed.warnings.some(w => /segments detected/.test(w));
           notify(
-            `Sommaire : ${parsed.warnings.length} avertissement(s) — ${parsed.warnings[0]}` +
-            (parsed.warnings.length > 1 ? ' (détails en console)' : ''),
+            `Summary: ${parsed.warnings.length} warning(s) — ${parsed.warnings[0]}` +
+            (parsed.warnings.length > 1 ? ' (details in console)' : ''),
             layoutDrift ? 'error' : 'info',
           );
         }
         const flownOnly = parsed.flights.filter(f => f.flightType === 'flown');
         if (flownOnly.length === 0) {
-          notify('Sommaire reconnu mais aucun vol trouvé.', 'info');
+          notify('Summary recognized but no flights found.', 'info');
         } else {
           const current = storedFlightsRef.current;
           const { missing, matched } = reconcile(flownOnly, current);
@@ -200,10 +200,10 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
         }
       } catch (err) {
         console.error('[summary] failed:', err);
-        notify(`Sommaire illisible : ${err.message || 'format non reconnu'}`, 'error');
+        notify(`Unreadable summary: ${err.message || 'unrecognized format'}`, 'error');
       }
       if (summaryFiles.length > 1) {
-        notify('Un seul sommaire traité à la fois — les autres ont été ignorés.', 'info');
+        notify('Only one summary is processed at a time — the others were skipped.', 'info');
       }
     }
 
@@ -236,7 +236,7 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
         if (result.rawTextPreview) lastRaw = result.rawTextPreview;
       } catch (err) {
         setLastError(`Exception: ${err.message}`);
-        console.error('[PDF] Erreur complète:', err);
+        console.error('[PDF] full error:', err);
       }
     }
     if (ofpFiles.length > 0) setTrimmedPdfs(trimmed);
@@ -271,7 +271,7 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
       }
       await processFiles(files);
     } catch (err) {
-      notify(`Erreur ouverture PDF: ${err.message || err}`, 'error');
+      notify(`Error opening PDF: ${err.message || err}`, 'error');
     }
   }, [processFiles, notify]);
 
@@ -364,7 +364,7 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
             borderTop: '3px solid #63b3ed', borderRadius: '50%',
             animation: 'spin 1s linear infinite', margin: '0 auto 16px',
           }} />
-          <p style={{ color: '#a0aec0', fontSize: 13 }}>Lecture PDF en cours…</p>
+          <p style={{ color: '#a0aec0', fontSize: 13 }}>Reading PDF…</p>
           <p style={{ color: '#475569', fontSize: 11, marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
             {processingFile}
           </p>
@@ -375,10 +375,10 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div>
               <h4 style={{ fontSize: 14, fontWeight: 600, color: '#63b3ed', margin: 0 }}>
-                {flights.length > 0 ? `${flights.length} vol(s) extrait(s) — Vérifier avant d'importer` : 'Aucun vol extrait'}
+                {flights.length > 0 ? `${flights.length} flight(s) extracted — Review before importing` : 'No flights extracted'}
               </h4>
               <p style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>
-                Cliquez sur une valeur pour la modifier. Les champs en rouge ont été estimés.
+                Click a value to edit it. Fields in red were estimated.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -386,13 +386,13 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
                 style={{ fontSize: 11, padding: '4px 10px', background: 'transparent', border: '1px solid #2d3748', borderRadius: 6, color: '#64748b', cursor: 'pointer' }}
                 onClick={() => setShowRaw(v => !v)}
               >
-                {showRaw ? 'Masquer' : 'Texte brut'}
+                {showRaw ? 'Hide' : 'Raw text'}
               </button>
               <button
                 style={{ fontSize: 11, padding: '4px 10px', background: 'transparent', border: '1px solid #2d3748', borderRadius: 6, color: '#a0aec0', cursor: 'pointer' }}
                 onClick={reset}
               >
-                Recommencer
+                Start over
               </button>
             </div>
           </div>
@@ -407,7 +407,7 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
                 <button
                   onClick={() => navigator.clipboard.writeText(rawPreview)}
                   style={{ fontSize: 11, padding: '3px 10px', background: '#1e2a45', border: '1px solid #2d3748', borderRadius: 6, color: '#a0aec0', cursor: 'pointer' }}
-                >Copier texte brut</button>
+                >Copy raw text</button>
               </div>
               <pre style={{
                 fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#64748b',
@@ -419,17 +419,17 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
           {flights.length === 0 ? (
             <div style={{ padding: 20, background: '#0a0f1e', borderRadius: 10, border: '1px solid #2d3748' }}>
               <p style={{ color: '#fca5a5', fontSize: 13, marginBottom: lastError ? 12 : 0 }}>
-                Aucun vol extrait de ce PDF.
+                No flights extracted from this PDF.
               </p>
               {lastError && (
                 <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#ef4444', marginBottom: 12, wordBreak: 'break-all' }}>
-                  Erreur : {lastError}
+                  Error: {lastError}
                 </p>
               )}
               {rawPreview ? (
                 <>
                   <p style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
-                    Texte extrait du PDF (vérifier si le format correspond) :
+                    Text extracted from the PDF (check whether the format matches):
                   </p>
                   <pre style={{
                     fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#64748b',
@@ -440,14 +440,14 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
                 </>
               ) : (
                 <p style={{ fontSize: 12, color: '#475569' }}>
-                  PDF image/scanné (pas de texte extractible) ou format non reconnu.
+                  Scanned/image PDF (no extractable text) or unrecognized format.
                 </p>
               )}
               <button
                 onClick={reset}
                 style={{ marginTop: 14, fontSize: 11, padding: '5px 12px', background: '#1e2a45', border: '1px solid #2d3748', borderRadius: 6, color: '#a0aec0', cursor: 'pointer' }}
               >
-                Réessayer
+                Try again
               </button>
             </div>
           ) : (
@@ -456,7 +456,7 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
                 <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12 }}>
                   <thead>
                     <tr>
-                      {['Date', 'Vol', 'Route', 'Total (h)', 'Canada (h)', 'Dist (nm)', 'Fiabilité'].map(h => (
+                      {['Date', 'Flight', 'Route', 'Total (h)', 'Canada (h)', 'Dist (nm)', 'Confidence'].map(h => (
                         <th key={h} style={{
                           textAlign: 'left', padding: '6px 10px', fontSize: 10,
                           color: '#475569', letterSpacing: '0.08em', fontWeight: 600,
@@ -515,10 +515,10 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
                     color: 'white', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                   }}
                 >
-                  <IconCheck /> Importer {flights.length} vol{flights.length > 1 ? 's' : ''}
+                  <IconCheck /> Import {flights.length} flight{flights.length > 1 ? 's' : ''}
                 </button>
                 <p style={{ fontSize: 11, color: '#475569' }}>
-                  Les doublons (même date + numéro de vol) seront automatiquement ignorés.
+                  Duplicates (same date + flight number) are skipped automatically.
                 </p>
               </div>
             </>
@@ -547,13 +547,13 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
             <IconUpload />
           </div>
           <p style={{ fontSize: 14, fontWeight: 600, color: isDragging ? '#63b3ed' : '#94a3b8', marginBottom: 6 }}>
-            {isDragging ? 'Déposer le PDF ici' : 'Glisser-déposer des PDFs de plan de vol'}
+            {isDragging ? 'Drop the PDF here' : 'Drag & drop flight plan PDFs'}
           </p>
           <p style={{ fontSize: 12, color: '#475569' }}>
-            ou cliquer pour sélectionner — Plans de vol AC, OFP, Crew Briefing
+            or click to browse — AC flight plans, OFP, Crew Briefing
           </p>
           <p style={{ fontSize: 11, color: '#374151', marginTop: 8 }}>
-            Plusieurs PDFs acceptés simultanément
+            Multiple PDFs accepted at once
           </p>
           <input
             ref={fileInputRef}
@@ -566,7 +566,7 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
           />
           {window.__TAURI_INTERNALS__ && (
             <button type="button" className="btn btn-secondary" onClick={e => { e.stopPropagation(); pickPdfViaTauri(); }} style={{ marginTop: 12 }}>
-              Choisir un PDF…
+              Choose a PDF…
             </button>
           )}
         </div>

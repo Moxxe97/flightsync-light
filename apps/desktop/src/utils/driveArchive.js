@@ -36,12 +36,12 @@ export function buildYearJson(record, hash) {
 // Validates the parsed year.json shape before anything touches IDB (audit
 // #24/G1). Returns null when valid, else a short French reason.
 export function validateYearJson(record) {
-  if (typeof record !== 'object' || record === null || Array.isArray(record)) return 'year.json invalide — pas un objet';
-  if (typeof record.year !== 'string' && typeof record.year !== 'number') return 'year.json invalide — year manquant';
-  if (!Array.isArray(record.flights)) return 'year.json invalide — flights doit être une liste';
-  if (!Array.isArray(record.residence)) return 'year.json invalide — residence doit être une liste';
-  if (record.manifest != null && (typeof record.manifest !== 'object' || Array.isArray(record.manifest))) return 'year.json invalide — manifest invalide';
-  if (typeof record.contentHash !== 'string') return 'year.json invalide — contentHash manquant';
+  if (typeof record !== 'object' || record === null || Array.isArray(record)) return 'invalid year.json — not an object';
+  if (typeof record.year !== 'string' && typeof record.year !== 'number') return 'invalid year.json — missing year';
+  if (!Array.isArray(record.flights)) return 'invalid year.json — flights must be a list';
+  if (!Array.isArray(record.residence)) return 'invalid year.json — residence must be a list';
+  if (record.manifest != null && (typeof record.manifest !== 'object' || Array.isArray(record.manifest))) return 'invalid year.json — invalid manifest';
+  if (typeof record.contentHash !== 'string') return 'invalid year.json — missing contentHash';
   return null;
 }
 
@@ -66,7 +66,7 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 async function authHeader() {
   const token = await ensureAccessToken();
-  if (!token) throw new Error('Non authentifié Google');
+  if (!token) throw new Error('Not signed in to Google');
   return { Authorization: `Bearer ${token}` };
 }
 
@@ -238,7 +238,7 @@ export async function downloadYear({ year, folderId }) {
   const expectedHash = record.contentHash;
   const actualHash = contentHash(record);
   if (actualHash !== expectedHash) {
-    throw new Error(`contentHash mismatch pour ${year}: attendu ${expectedHash}, calculé ${actualHash}`);
+    throw new Error(`contentHash mismatch for ${year}: expected ${expectedHash}, computed ${actualHash}`);
   }
   const flights = record.flights || [];
   const manifest = record.manifest || { ofpFlightIds: [], bpDates: [] };

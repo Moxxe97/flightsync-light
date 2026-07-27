@@ -77,7 +77,7 @@ export function parseBackupJson(text) {
     return { error: `JSON parse: ${err.message} (head: ${String(text).slice(0, 60)})` };
   }
   if (Array.isArray(data)) {
-    if (!data.every(isValidFlight)) return { error: 'Import invalide — certains vols sont mal formés' };
+    if (!data.every(isValidFlight)) return { error: 'Invalid import — some flights are malformed' };
     return {
       preview: {
         type: 'flights',
@@ -102,8 +102,8 @@ export function parseBackupJson(text) {
     const settings = isPlainObject(data.settings)
       ? { backupReminder: Number(data.settings.backupReminder) || 7 }
       : undefined;
-    if (!flights.every(isValidFlight)) return { error: 'Backup invalide — certains vols sont mal formés' };
-    if (!residence.every(isValidResidenceDay)) return { error: 'Backup invalide — certaines entrées de résidence sont mal formées' };
+    if (!flights.every(isValidFlight)) return { error: 'Invalid backup — some flights are malformed' };
+    if (!residence.every(isValidResidenceDay)) return { error: 'Invalid backup — some residence entries are malformed' };
     return {
       preview: {
         type: 'backup',
@@ -116,14 +116,14 @@ export function parseBackupJson(text) {
     };
   }
   if (isPlainObject(data) && data.version && data.data) {
-    if (!isPlainObject(data.data)) return { error: 'Backup invalide — données manquantes' };
+    if (!isPlainObject(data.data)) return { error: 'Invalid backup — missing data' };
     const flights = data.data.flights ?? [];
     const residence = data.data.residence ?? [];
     if (!Array.isArray(flights) || !Array.isArray(residence)) {
-      return { error: 'Backup invalide — vols/résidence doivent être des listes' };
+      return { error: 'Invalid backup — flights/residence must be lists' };
     }
-    if (!flights.every(isValidFlight)) return { error: 'Backup invalide — certains vols sont mal formés' };
-    if (!residence.every(isValidResidenceDay)) return { error: 'Backup invalide — certaines entrées de résidence sont mal formées' };
+    if (!flights.every(isValidFlight)) return { error: 'Invalid backup — some flights are malformed' };
+    if (!residence.every(isValidResidenceDay)) return { error: 'Invalid backup — some residence entries are malformed' };
     return {
       preview: {
         type: 'backup',

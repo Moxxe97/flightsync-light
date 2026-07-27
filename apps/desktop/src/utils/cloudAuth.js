@@ -126,14 +126,14 @@ export async function signInWithGoogle() {
   const codePromise = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       delete window.__flightSyncOAuthCb;
-      reject(new Error('Connexion Google expirée (5 min)'));
+      reject(new Error('Google sign-in timed out (5 min)'));
     }, 5 * 60 * 1000);
     window.__flightSyncOAuthCb = (payload) => {
       clearTimeout(timeout);
       delete window.__flightSyncOAuthCb;
       if (payload.error) reject(new Error(payload.error));
       // Bind the callback to the request we initiated (CSRF guard).
-      else if (payload.state !== state) reject(new Error('Réponse OAuth inattendue (state invalide) — ignorée'));
+      else if (payload.state !== state) reject(new Error('Unexpected OAuth response (invalid state) — ignored'));
       else if (payload.code) resolve(payload.code);
       else reject(new Error('OAuth callback missing code'));
     };
@@ -160,7 +160,7 @@ export async function signInWithGoogle() {
 }
 
 // Returns a valid access token, silently refreshing via the Keychain refresh
-// token. Returns null when signed out. Throws 'reconnexion requise' when the
+// token. Returns null when signed out. Throws 'reconnection required' when the
 // refresh token was revoked (the UI shows the sign-in button again).
 export async function ensureAccessToken() {
   if (_accessToken && Date.now() < _accessTokenExpiresAt) return _accessToken;
@@ -182,7 +182,7 @@ export async function ensureAccessToken() {
       await invoke('delete_refresh_token');
       _accessToken = null;
       setProfile(null);
-      throw new Error('reconnexion requise');
+      throw new Error('reconnection required');
     }
     throw err;
   }

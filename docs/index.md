@@ -5,38 +5,38 @@ title: FlightSync Light
 
 # FlightSync Light
 
-Carnet de vol macOS pour pilotes de ligne — **gratuit, local-first, open source**.
+A macOS logbook for airline pilots — **free, local-first, open source**.
 
-FlightSync Light vous permet d'importer vos OFP PDF directement depuis votre ordinateur, de suivre vos heures de vol, de calculer automatiquement votre proportion de temps canadien (ARC) et de gérer vos archives annuelles — le tout sans inscription, sans serveur et sans télémétrie. Toutes vos données restent sur votre Mac.
-
----
-
-## Fonctionnalités
-
-- **Import OFP PDF** — analyse des plans de vol et extraction automatique des données de vol
-- **Proportion canadienne (ARC)** — calcul temps-sur-Canada conforme aux règles de l'Agence du revenu du Canada
-- **Statistiques** — heures totales, proportion canadienne, jours hors-Canada pour l'année fiscale
-- **Calendrier & panneau de jour** — vue mensuelle, panneau de classification / boarding passes / notes par jour, export ICS
-- **Archives** — accès aux années antérieures en lecture seule, sauvegardées localement
-- **Laissez-passer d'embarquement** — stockage local des boarding passes par date
-- **Sauvegarde optionnelle** — vers votre propre Google Drive (`drive.file` scope — l'app ne voit que ses propres fichiers)
+FlightSync Light lets you import your OFP PDFs straight from your computer, track your flight hours, automatically compute your Canadian time proportion (CRA) and manage your yearly archives — all with no sign-up, no server and no telemetry. All your data stays on your Mac.
 
 ---
 
-## Télécharger
+## Features
 
-Rendez-vous dans l'onglet [**Releases**](../../releases) de ce dépôt GitHub pour télécharger la dernière version — compatible **Mac Intel et Apple Silicon** (macOS 13+).
-
-> **Premier lancement :** l'app n'est pas signée Apple (gratuite et open source). Sur certains Mac, macOS bloque le lancement **sans message** (l'icône rebondit puis disparaît). Dans le Terminal : `xattr -dr com.apple.quarantine "/Applications/FlightSync Light.app"` — ou via **Réglages Système → Confidentialité et sécurité → Ouvrir quand même**. Voir le README pour les instructions détaillées.
-
----
-
-## Vie privée
-
-Aucune donnée collectée. Aucun serveur. Aucune inscription.
-
-[Politique de confidentialité complète](confidentialite.md)
+- **OFP PDF import** — parses flight plans and extracts flight data automatically
+- **Canadian proportion (CRA)** — time-over-Canada calculation consistent with Canada Revenue Agency rules
+- **Statistics** — total hours, Canadian proportion, days outside Canada for the fiscal year
+- **Calendar & day panel** — monthly view, per-day classification / boarding passes / notes panel, ICS export
+- **Archive** — read-only access to past years, stored locally
+- **Boarding passes** — local storage of boarding passes by date
+- **Optional backup** — to your own Google Drive (`drive.file` scope — the app only sees its own files)
 
 ---
 
-FlightSync Light est un projet open source gratuit — [code source disponible sur GitHub](../../).
+## Download
+
+Head to the [**Releases**](../../releases) tab of this GitHub repository to download the latest version — compatible with **Intel and Apple Silicon Macs** (macOS 13+).
+
+> **First launch:** the app is not Apple-signed (it's free and open source). On some Macs, macOS blocks the launch **with no message at all** (the icon bounces then disappears). In Terminal: `xattr -dr com.apple.quarantine "/Applications/FlightSync Light.app"` — or via **System Settings → Privacy & Security → Open Anyway**. See the README for detailed instructions.
+
+---
+
+## Privacy
+
+No data collected. No server. No sign-up.
+
+[Full privacy policy](confidentialite.md)
+
+---
+
+FlightSync Light is a free open-source project — [source code available on GitHub](../../).

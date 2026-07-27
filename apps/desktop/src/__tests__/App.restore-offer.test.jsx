@@ -1,8 +1,8 @@
 // Integration test for the proactive Drive restore offer in App.jsx (Task 10).
 // Behaviour under test:
 //   - signed in + empty local store + findBackup resolves { fileId }
-//     -> the "Sauvegarde trouvée sur Google Drive" ConfirmModal appears
-//   - confirming "Restaurer" -> restoreFromDrive runs: downloadBackup(fileId)
+//     -> the "Backup found on Google Drive" ConfirmModal appears
+//   - confirming "Restore" -> restoreFromDrive runs: downloadBackup(fileId)
 //     is called, the parsed snapshot replaces local state.
 //
 // Mirrors App.auto-backup.test.jsx's mock set + render harness. The driveBackup
@@ -98,13 +98,13 @@ describe('App proactive Drive restore offer', () => {
     await renderApp();
 
     // The offer modal appears (findBackup resolved { fileId }).
-    const modalTitle = await screen.findByText('Sauvegarde trouvée sur Google Drive');
+    const modalTitle = await screen.findByText('Backup found on Google Drive');
     expect(modalTitle).toBeTruthy();
     expect(findBackupMock).toHaveBeenCalled();
 
-    // Confirm "Restaurer" → restoreFromDrive path.
+    // Confirm "Restore" → restoreFromDrive path.
     await act(async () => {
-      fireEvent.click(screen.getByText('Restaurer'));
+      fireEvent.click(screen.getByText('Restore'));
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -116,7 +116,7 @@ describe('App proactive Drive restore offer', () => {
 
   it('a storage.set failure during persist leaves React state untouched and never reaches blob restore (M6a)', async () => {
     await renderApp();
-    await screen.findByText('Sauvegarde trouvée sur Google Drive');
+    await screen.findByText('Backup found on Google Drive');
 
     // Simulate a QuotaExceededError on the very FIRST persisted key, so the
     // restore never writes anything to disk and there's no partial state.
@@ -128,7 +128,7 @@ describe('App proactive Drive restore offer', () => {
 
     try {
       await act(async () => {
-        fireEvent.click(screen.getByText('Restaurer'));
+        fireEvent.click(screen.getByText('Restore'));
         await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
       });
 
@@ -139,7 +139,7 @@ describe('App proactive Drive restore offer', () => {
       expect(restoreBlobsMock).not.toHaveBeenCalled();
 
       // A clear French error is surfaced instead of a silent state/disk mismatch.
-      expect(await screen.findByText(/Restauration annulée : stockage insuffisant/)).toBeTruthy();
+      expect(await screen.findByText(/Restore cancelled: not enough storage/)).toBeTruthy();
 
       // Disk was never overwritten for the key that failed.
       expect(window.localStorage.getItem('ac-flights-data')).toBeNull();
@@ -151,7 +151,7 @@ describe('App proactive Drive restore offer', () => {
   it('signed out: no restore offer', async () => {
     authProfile = null;
     await renderApp();
-    expect(screen.queryByText('Sauvegarde trouvée sur Google Drive')).toBeNull();
+    expect(screen.queryByText('Backup found on Google Drive')).toBeNull();
     expect(findBackupMock).not.toHaveBeenCalled();
   });
 });

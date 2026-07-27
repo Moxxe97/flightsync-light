@@ -38,18 +38,18 @@ describe('DayPanel', () => {
     render(<DayPanel {...baseProps} onSaveDay={onSaveDay} onClose={onClose} />);
     await waitFor(() => expect(idb.getBoardingPassesForDate).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('button', { name: /Mexique/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Mexico/i }));
 
     expect(onSaveDay).toHaveBeenCalledWith('2026-03-15', { location: 'mexico', notes: '' });
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('3. Effacer saves a null location', async () => {
+  it('3. Clear saves a null location', async () => {
     const onSaveDay = vi.fn();
     render(<DayPanel {...baseProps} entry={{ date: '2026-03-15', location: 'canada' }} onSaveDay={onSaveDay} />);
     await waitFor(() => expect(idb.getBoardingPassesForDate).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('button', { name: /^Effacer$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Clear$/i }));
 
     expect(onSaveDay).toHaveBeenCalledWith('2026-03-15', { location: null, notes: '' });
   });
@@ -66,7 +66,7 @@ describe('DayPanel', () => {
     await waitFor(() => expect(idb.getBoardingPassesForDate).toHaveBeenCalled());
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'YUL-CDG, hôtel Mercure' } });
-    fireEvent.click(screen.getByRole('button', { name: /Fermer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Close/i }));
 
     expect(onSaveDay).toHaveBeenCalledWith('2026-03-15', { location: 'transit', notes: 'YUL-CDG, hôtel Mercure' });
     expect(onClose).toHaveBeenCalled();
@@ -83,7 +83,7 @@ describe('DayPanel', () => {
     />);
     await waitFor(() => expect(idb.getBoardingPassesForDate).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('button', { name: /Fermer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Close/i }));
 
     expect(onSaveDay).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
@@ -98,7 +98,7 @@ describe('DayPanel', () => {
 
     await screen.findByText(/bp\.pdf/);
 
-    fireEvent.click(screen.getByTitle('Supprimer'));
+    fireEvent.click(screen.getByTitle('Delete'));
 
     await waitFor(() => expect(idb.deleteBoardingPass).toHaveBeenCalledWith(7));
     expect(onPassesChanged).toHaveBeenCalled();
@@ -124,7 +124,7 @@ describe('DayPanel', () => {
     render(<DayPanel {...baseProps} />);
     const file = new File(['x'], 'carte.pdf', { type: 'application/pdf' });
     fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
-    await screen.findByText(/Erreur boarding pass/);
+    await screen.findByText(/Boarding pass error/);
     expect(baseProps.onPassesChanged).not.toHaveBeenCalled();
   });
 
@@ -140,15 +140,15 @@ describe('DayPanel', () => {
     />);
     await waitFor(() => expect(idb.getBoardingPassesForDate).toHaveBeenCalled());
 
-    // No 'Effacer' button
-    expect(screen.queryByRole('button', { name: /^Effacer$/i })).toBeNull();
+    // No 'Clear' button
+    expect(screen.queryByRole('button', { name: /^Clear$/i })).toBeNull();
     // No '+ Ajouter' button
     expect(screen.queryByText(/Ajouter/i)).toBeNull();
     // Textarea is readOnly
     expect(screen.getByRole('textbox').readOnly).toBe(true);
 
-    // Clicking Fermer must NOT trigger onSaveDay
-    fireEvent.click(screen.getByRole('button', { name: /Fermer/i }));
+    // Clicking Close must NOT trigger onSaveDay
+    fireEvent.click(screen.getByRole('button', { name: /Close/i }));
     expect(onSaveDay).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });

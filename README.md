@@ -1,110 +1,110 @@
 # FlightSync Light
 
-Carnet de vol macOS pour pilotes de ligne francophones — gratuit, local-first, open source.
+A macOS logbook for airline pilots — free, local-first, open source.
 
 ---
 
-## Ce que l'app fait
+## What the app does
 
-- **Tableau de bord** — heures totales, proportion canadienne (ARC), jours hors-Canada pour l'année fiscale en cours
-- **Calendrier & panneau de jour** — vue mensuelle ; cliquer un jour ouvre le panneau de classification, boarding passes et notes ; export ICS
-- **Sauvegarde** — sauvegarde de secours optionnelle vers votre propre Google Drive **et/ou** un dossier local de votre choix (voir ci-dessous)
-- **Données** — import OFP PDF, gestion des vols et des laissez-passer d'embarquement
-- **Archives** — accès en lecture seule aux années antérieures archivées localement ; backup Drive par année
-- **Historique** — journal des opérations de sauvegarde
+- **Dashboard** — total hours, Canadian proportion (CRA), days outside Canada for the current fiscal year
+- **Calendar & day panel** — monthly view; clicking a day opens the classification, boarding-pass and notes panel; ICS export
+- **Backup** — optional safety backup to your own Google Drive **and/or** a local folder of your choice (see below)
+- **Data** — OFP PDF import, flight and boarding-pass management
+- **Archive** — read-only access to past years archived locally; per-year Drive backup
+- **History** — backup operation log
 
-Toutes les données sont stockées **localement sur votre Mac** (localStorage + IndexedDB). Aucun serveur, aucune télémétrie, aucune inscription requise.
+All data is stored **locally on your Mac** (localStorage + IndexedDB). No server, no telemetry, no sign-up required.
 
 ---
 
-## Gratuit & vie privée
+## Free & private
 
-- **Aucune donnée n'est collectée.** FlightSync Light n'a pas de serveur, pas de compte, pas de télémétrie.
-- Les vols, résidences et plans de vol vivent dans `~/Library/WebKit/com.flightsynclight.app/` sur votre Mac.
-- La connexion Google est **entièrement optionnelle** — l'app fonctionne à 100 % sans compte.
-- Si vous activez la sauvegarde Drive, vos fichiers vont dans **votre propre** Google Drive (`FlightSync Light/`). L'app utilise la portée `drive.file` : elle ne peut voir que les fichiers qu'elle a elle-même créés.
+- **No data is collected.** FlightSync Light has no server, no account, no telemetry.
+- Flights, residence days and flight plans live in `~/Library/WebKit/com.flightsynclight.app/` on your Mac.
+- Google sign-in is **entirely optional** — the app is 100% functional without an account.
+- If you enable the Drive backup, your files go to **your own** Google Drive (`FlightSync Light/`). The app uses the `drive.file` scope: it can only see files it has itself created.
 
 ---
 
 ## Installation
 
-### Télécharger
+### Download
 
-Rendez-vous dans l'onglet **Releases** de ce dépôt et téléchargez le `.dmg` « universal » de la dernière version — compatible **Mac Intel et Apple Silicon** (macOS 13+). Ouvrez-le et faites glisser `FlightSync Light.app` dans votre dossier **Applications**. (Le `.zip` contient la même app.)
+Head to this repository's **Releases** tab and download the "universal" `.dmg` of the latest version — compatible with **Intel and Apple Silicon Macs** (macOS 13+). Open it and drag `FlightSync Light.app` into your **Applications** folder. (The `.zip` contains the same app.)
 
-### Premier lancement — Gatekeeper
+### First launch — Gatekeeper
 
-L'application n'est pas signée par Apple (coût et processus administratif disproportionné pour un outil gratuit). macOS bloquera le premier lancement — et sur certains Mac **sans afficher le moindre message** : l'icône rebondit dans le Dock puis disparaît. La méthode la plus fiable, dans le **Terminal** :
+The application is not Apple-signed (the cost and paperwork are disproportionate for a free tool). macOS will block the first launch — and on some Macs **without showing any message at all**: the icon bounces in the Dock, then disappears. The most reliable method, in **Terminal**:
 
 ```
 xattr -dr com.apple.quarantine "/Applications/FlightSync Light.app"
 ```
 
-puis ouvrez l'app normalement. Alternative sans Terminal (si macOS affiche bien le blocage) :
+then open the app normally. Alternative without Terminal (if macOS does show the block):
 
-1. Double-cliquez sur `FlightSync Light.app` → macOS affiche *« Impossible d'ouvrir… »*.
-2. Ouvrez **Réglages Système → Confidentialité et sécurité**.
-3. Faites défiler jusqu'à la section **Sécurité** — vous verrez le message *« FlightSync Light a été bloquée… »*.
-4. Cliquez sur **Ouvrir quand même**.
-5. Confirmez dans la boîte de dialogue qui s'affiche.
+1. Double-click `FlightSync Light.app` → macOS shows *"cannot be opened…"*.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll down to the **Security** section — you will see the message *"FlightSync Light was blocked…"*.
+4. Click **Open Anyway**.
+5. Confirm in the dialog that appears.
 
-Ce processus n'est requis qu'une seule fois **par Mac**. macOS se souvient de votre choix.
+This is only needed once **per Mac**. macOS remembers your choice.
 
-> **Pourquoi non signé ?** La signature Apple coûte 99 USD/an et exige une inscription au programme développeur. Pour un outil gratuit et open source distribué directement, ce surcoût n'est pas justifié. Le code source est disponible ici pour audit.
+> **Why unsigned?** Apple signing costs USD 99/year and requires enrolling in the developer program. For a free, open-source tool distributed directly, that overhead isn't justified. The source code is available here for audit.
 
 ---
 
-## Connexion Google (optionnelle)
+## Google sign-in (optional)
 
-La connexion Google déverrouille la sauvegarde Drive :
+Google sign-in unlocks the Drive backup:
 
-| Fonctionnalité | Portée requise |
+| Feature | Required scope |
 |---|---|
-| Sauvegarde de secours dans votre Drive | `drive.file` |
+| Safety backup to your Drive | `drive.file` |
 
-L'écran de consentement Google ne demande que des portées non-sensibles (`openid email profile drive.file`). Aucune portée Agenda n'est requise — la classification des jours est entièrement manuelle depuis le panneau de jour.
+The Google consent screen only asks for non-sensitive scopes (`openid email profile drive.file`). No Calendar scope is requested — day classification is entirely manual from the day panel.
 
-**Ce que l'app ne fait pas :**
+**What the app does not do:**
 
-- Elle ne lit **aucun** autre fichier Drive que ceux qu'elle a créés (`drive.file` limite l'accès aux seuls fichiers créés par l'app).
-- Elle ne lit ni ne modifie votre calendrier Google — aucune portée Agenda n'est demandée.
-- Le jeton de rafraîchissement est stocké dans le **Trousseau macOS** ; le jeton d'accès reste en mémoire.
-- Votre profil (email, nom) est mémorisé dans localStorage pour affichage — il n'est envoyé nulle part.
+- It reads **no** Drive files other than the ones it created (`drive.file` limits access to app-created files only).
+- It neither reads nor modifies your Google calendar — no Calendar scope is requested.
+- The refresh token is stored in the **macOS Keychain**; the access token stays in memory.
+- Your profile (email, name) is kept in localStorage for display — it is sent nowhere.
 
-**Révoquer l'accès :** [myaccount.google.com/permissions](https://myaccount.google.com/permissions)
-
----
-
-## Signaler un problème
-
-Ouvrez une [Issue GitHub](../../issues) dans ce dépôt. Merci de décrire la version macOS, les étapes pour reproduire, et si possible joindre la console (Menu → Affichage → Outils de développement).
+**Revoke access:** [myaccount.google.com/permissions](https://myaccount.google.com/permissions)
 
 ---
 
-## Compiler depuis les sources
+## Reporting a problem
 
-Prérequis : **Rust** (via [rustup](https://rustup.rs)), **Node.js ≥ 20**, **pnpm 9**.
+Open a [GitHub Issue](../../issues) in this repository. Please describe your macOS version, the steps to reproduce, and if possible attach the console output (Menu → View → Developer Tools).
+
+---
+
+## Building from source
+
+Prerequisites: **Rust** (via [rustup](https://rustup.rs)), **Node.js ≥ 20**, **pnpm 9**.
 
 ```bash
 pnpm install
 pnpm tauri:build
 ```
 
-L'exécutable signable se trouve dans `apps/desktop/src-tauri/target/release/bundle/macos/` (architecture de la machine uniquement).
+The signable executable is produced in `apps/desktop/src-tauri/target/release/bundle/macos/` (host architecture only).
 
-Pour une version distribuable **universelle** (Intel + Apple Silicon) :
+For a distributable **universal** build (Intel + Apple Silicon):
 
 ```bash
-rustup target add x86_64-apple-darwin   # une seule fois
+rustup target add x86_64-apple-darwin   # once
 pnpm --filter flight-sync-light-desktop exec tauri build --target universal-apple-darwin
 ```
 
-Le bundle se trouve alors dans `apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/`.
+The bundle then lands in `apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/`.
 
-Pour le développement :
+For development:
 
 ```bash
-pnpm dev          # Vite HMR + Tauri en mode dev
-pnpm test         # Vitest (tous les workspaces)
-pnpm build:desktop  # Vite build uniquement
+pnpm dev          # Vite HMR + Tauri in dev mode
+pnpm test         # Vitest (all workspaces)
+pnpm build:desktop  # Vite build only
 ```

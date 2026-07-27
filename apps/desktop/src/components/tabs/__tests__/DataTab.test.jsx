@@ -19,15 +19,15 @@ const baseProps = {
 describe('DataTab read-only gating', () => {
   it('hides PDF import and delete, keeps the OFP viewer button, when readOnly', () => {
     render(<DataTab {...baseProps} readOnly />);
-    expect(screen.queryByText(/IMPORT PDF/i)).toBeNull();
-    expect(screen.queryByTitle('Supprimer ce vol')).toBeNull();
-    expect(screen.getByTitle('Voir le plan de vol')).toBeTruthy();
+    expect(screen.queryByText(/PDF IMPORT/i)).toBeNull();
+    expect(screen.queryByTitle('Delete this flight')).toBeNull();
+    expect(screen.getByTitle('View flight plan')).toBeTruthy();
   });
 
   it('shows PDF import and delete when not readOnly', () => {
     render(<DataTab {...baseProps} />);
-    expect(screen.getByText(/IMPORT PDF/i)).toBeTruthy();
-    expect(screen.getByTitle('Supprimer ce vol')).toBeTruthy();
+    expect(screen.getByText(/PDF IMPORT/i)).toBeTruthy();
+    expect(screen.getByTitle('Delete this flight')).toBeTruthy();
   });
 
   it('does not mutate the flights prop when sorting (audit #29)', () => {

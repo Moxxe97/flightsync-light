@@ -5,24 +5,24 @@ import { formatDate } from '@flightsync/core/util';
 // 'backup_error') use the {at, action, detail} shape; the legacy sync entries
 // used {timestamp, deviceId, action, flights, residence}. Both render here.
 const ACTION_META = {
-  backup: { label: "Sauvegarde Drive", bg: "#0f2e1f", color: "#34d399", Icon: Icons.Upload },
-  backup_error: { label: "Échec sauvegarde", bg: "#3a1414", color: "#f87171", Icon: Icons.Alert },
-  sync_push: { label: "Sauvegarde locale", bg: "#1e3a5f", color: "#63b3ed", Icon: Icons.Upload },
-  sync_pull: { label: "Rechargement", bg: "#2d1b69", color: "#a78bfa", Icon: Icons.Download },
+  backup: { label: "Drive backup", bg: "#0f2e1f", color: "#34d399", Icon: Icons.Upload },
+  backup_error: { label: "Backup failed", bg: "#3a1414", color: "#f87171", Icon: Icons.Alert },
+  sync_push: { label: "Local backup", bg: "#1e3a5f", color: "#63b3ed", Icon: Icons.Upload },
+  sync_pull: { label: "Reload", bg: "#2d1b69", color: "#a78bfa", Icon: Icons.Download },
 };
-const DEFAULT_META = { label: "Synchronisation", bg: "#1e2a45", color: "#a0aec0", Icon: Icons.Sync };
+const DEFAULT_META = { label: "Sync", bg: "#1e2a45", color: "#a0aec0", Icon: Icons.Sync };
 
 export default function HistoryTab({ log }) {
   return (
     <div style={{ animation: "fadeIn 0.3s ease" }}>
       <div className="card">
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 20, color: "#94a3b8", letterSpacing: "0.04em" }}>
-          HISTORIQUE DE SYNCHRONISATION
+          BACKUP HISTORY
         </h3>
         {log.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: "#475569" }}>
             <Icons.History />
-            <p style={{ marginTop: 12, fontSize: 14 }}>Aucun historique de synchronisation</p>
+            <p style={{ marginTop: 12, fontSize: 14 }}>No backup history</p>
           </div>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
@@ -32,7 +32,7 @@ export default function HistoryTab({ log }) {
               // Backup entries stamp `at`; legacy entries stamp `timestamp`.
               const when = entry.at ?? entry.timestamp;
               const subtitle = entry.detail
-                ?? (entry.flights !== undefined ? `${entry.flights} vols · ${entry.residence || 0} jours` : null);
+                ?? (entry.flights !== undefined ? `${entry.flights} flights · ${entry.residence || 0} days` : null);
               return (
                 <div key={i} style={{
                   display: "flex", alignItems: "center", gap: 14, padding: "12px 16px",

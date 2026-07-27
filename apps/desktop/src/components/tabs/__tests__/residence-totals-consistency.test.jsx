@@ -8,9 +8,9 @@ import CalendarTab from '../CalendarTab';
 
 afterEach(cleanup);
 
-// Pull the "Jours hors Canada : N / 183" number out of a rendered tab.
+// Pull the "Days outside Canada: N / 183" number out of a rendered tab.
 function outsideShown(container) {
-  const m = container.textContent.match(/Jours hors Canada\s*:\s*(\d+)\s*\/\s*183/);
+  const m = container.textContent.match(/Days outside Canada\s*:\s*(\d+)\s*\/\s*183/);
   return m ? Number(m[1]) : null;
 }
 
@@ -27,7 +27,7 @@ const calProps = {
   setDayPanelDate: () => {}, year: 2026,
 };
 
-describe('Tableau de bord and Calendrier agree on days out of Canada', () => {
+describe('Dashboard and Calendar agree on days out of Canada', () => {
   it('reports the same total for clean four-location data', () => {
     const residence = [
       { date: '2026-01-01', location: 'canada' },

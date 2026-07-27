@@ -68,7 +68,7 @@ describe('runBackup', () => {
     const { ensureAccessToken } = await import('../cloudAuth');
     ensureAccessToken.mockResolvedValueOnce(null);
     await expect(runBackup({ flights: [], residence: [], settings: {} }))
-      .rejects.toThrow(/Non authentifié/);
+      .rejects.toThrow(/Not signed in/);
   });
 
   it('names things for Light only', () => {
@@ -333,7 +333,7 @@ describe('downloadBackup size cap (M6b)', () => {
       headers: { get: (k) => (k === 'content-length' ? String(MAX_BACKUP_BYTES + 1) : null) },
       text: textSpy,
     });
-    await expect(downloadBackup('FILE')).rejects.toThrow(/trop volumineuse/);
+    await expect(downloadBackup('FILE')).rejects.toThrow(/too large/);
     expect(textSpy).not.toHaveBeenCalled();
   });
 
@@ -355,7 +355,7 @@ describe('downloadBackup size cap (M6b)', () => {
       headers: { get: () => null },
       text: async () => bigText,
     });
-    await expect(downloadBackup('FILE')).rejects.toThrow(/trop volumineuse/);
+    await expect(downloadBackup('FILE')).rejects.toThrow(/too large/);
   });
 });
 

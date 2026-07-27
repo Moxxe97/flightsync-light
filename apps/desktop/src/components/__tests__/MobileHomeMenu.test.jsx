@@ -5,7 +5,7 @@ import MobileHomeMenu from '../MobileHomeMenu.jsx';
 
 const Dot = () => <svg data-testid="icon" />;
 const sections = [
-  { id: 'dashboard', label: 'Tableau de Bord', subtitle: 'Résumé', icon: Dot },
+  { id: 'dashboard', label: 'Dashboard', subtitle: 'Summary', icon: Dot },
   { id: 'calendar', label: 'Calendrier', subtitle: 'Jours', icon: Dot },
 ];
 
@@ -16,7 +16,7 @@ describe('MobileHomeMenu', () => {
     render(<MobileHomeMenu sections={sections} onSelect={() => {}} />);
     const buttons = screen.getAllByRole('button');
     expect(buttons).toHaveLength(2);
-    expect(buttons[0].textContent).toContain('Tableau de Bord');
+    expect(buttons[0].textContent).toContain('Dashboard');
     expect(buttons[1].textContent).toContain('Calendrier');
   });
 

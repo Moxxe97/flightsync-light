@@ -15,7 +15,7 @@ const IconDownload = () => (
 
 const formatDate = (iso) => {
   const d = new Date(iso + 'T12:00:00');
-  return d.toLocaleDateString('fr-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 };
 
 // Compute the object URL once from the pass blob (bpToObjectURL is synchronous).
@@ -73,7 +73,7 @@ export default function BoardingPassModal({ pass, onClose }) {
                 onClick={handleDownload}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '4px 10px', background: '#1e2a45', border: '1px solid #2d3748', borderRadius: 6, color: '#a0aec0', cursor: 'pointer' }}
               >
-                <IconDownload /> Télécharger
+                <IconDownload /> Download
               </button>
             )}
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 4 }}>

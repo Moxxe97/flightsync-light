@@ -14,7 +14,7 @@ describe('MobileSectionHeader', () => {
   it('calls onBack when the back control is clicked', () => {
     const onBack = vi.fn();
     render(<MobileSectionHeader title="Calendrier" onBack={onBack} />);
-    fireEvent.click(screen.getByRole('button', { name: /retour/i }));
+    fireEvent.click(screen.getByRole('button', { name: /back to menu/i }));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
