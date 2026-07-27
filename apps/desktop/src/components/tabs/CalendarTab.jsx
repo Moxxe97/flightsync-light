@@ -47,7 +47,7 @@ export default function CalendarTab({
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {[
               { color: "#ef4444", label: "🏠 Canada" },
-              { color: "#10b981", label: "🌴 Mexico" },
+              { color: "#10b981", label: "🌴 Home" },
               { color: "#3b82f6", label: "🌍 International" },
               { color: "#f59e0b", label: "✈️ Transit" },
             ].map((item) => (
@@ -204,7 +204,7 @@ export default function CalendarTab({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
                 {[
                   { label: "🏠 Canada", count: counts.canada, color: "#ef4444" },
-                  { label: "🌴 Mexico", count: counts.mexico, color: "#10b981" },
+                  { label: "🌴 Home", count: counts.mexico, color: "#10b981" },
                   { label: "🌍 International", count: counts.international, color: "#3b82f6" },
                   { label: "✈️ Transit", count: counts.transit, color: "#f59e0b" },
                   { label: "Total tracked", count: counts.total, color: "#94a3b8" },

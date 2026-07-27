@@ -10,7 +10,7 @@ import {
 
 const OPTIONS = [
   { key: 'canada',        emoji: '🏠', label: 'Canada',        color: '#ef4444' },
-  { key: 'mexico',        emoji: '🌴', label: 'Mexico',       color: '#10b981' },
+  { key: 'mexico',        emoji: '🌴', label: 'Home',         color: '#10b981' },
   { key: 'international', emoji: '🌍', label: 'International', color: '#3b82f6' },
   { key: 'transit',       emoji: '✈️', label: 'Transit',       color: '#f59e0b' },
 ];

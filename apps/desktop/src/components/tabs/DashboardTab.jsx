@@ -209,7 +209,7 @@ export default function DashboardTab({
             <div className="row-stack" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
               {[
                 { label: "🏠 CANADA", count: tally.canada, color: "#ef4444" },
-                { label: "🌴 MEXICO", count: tally.mexico, color: "#10b981" },
+                { label: "🌴 HOME", count: tally.mexico, color: "#10b981" },
                 { label: "🌍 INTERNATIONAL", count: tally.international, color: "#3b82f6" },
                 { label: "✈️ TRANSIT", count: tally.transit, color: "#f59e0b" },
               ].map((cat) => (

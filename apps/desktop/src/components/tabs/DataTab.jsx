@@ -122,7 +122,7 @@ export default function DataTab({
           <div className="row-stack" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
             {[
               { label: "Canada", count: residence.filter((r) => r.location === "canada").length, color: "#ef4444", icon: "🏠" },
-              { label: "Mexico", count: residence.filter((r) => r.location === "mexico").length, color: "#10b981", icon: "🌴" },
+              { label: "Home", count: residence.filter((r) => r.location === "mexico").length, color: "#10b981", icon: "🌴" },
               { label: "International", count: residence.filter((r) => r.location === "international").length, color: "#63b3ed", icon: "🌍" },
               { label: "Outside Canada", count: residence.filter((r) => r.location !== "canada").length, color: "#a78bfa", icon: "✈️" },
             ].map((cat) => (

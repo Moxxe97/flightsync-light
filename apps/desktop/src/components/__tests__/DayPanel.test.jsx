@@ -38,7 +38,7 @@ describe('DayPanel', () => {
     render(<DayPanel {...baseProps} onSaveDay={onSaveDay} onClose={onClose} />);
     await waitFor(() => expect(idb.getBoardingPassesForDate).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('button', { name: /Mexico/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Home/i }));
 
     expect(onSaveDay).toHaveBeenCalledWith('2026-03-15', { location: 'mexico', notes: '' });
     expect(onClose).not.toHaveBeenCalled();

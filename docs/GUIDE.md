@@ -45,7 +45,7 @@ A macOS logbook for airline pilots — free, no account required, all your data 
 Click a day → the panel opens:
 
 - **Classification** — one click on one of the 4 options, saved immediately:
-  🏠 **Canada** · 🌴 **Mexico** · 🌍 **International** · ✈️ **Transit**
+  🏠 **Canada** · 🌴 **Home** (your country of residence abroad) · 🌍 **International** · ✈️ **Transit**
 - **Boarding pass** — drop the day's PDF/photo (stored locally, never sent anywhere)
 - **Notes** — free text, saved when the panel closes
 
