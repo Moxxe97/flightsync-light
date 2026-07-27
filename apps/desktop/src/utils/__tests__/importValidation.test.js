@@ -17,17 +17,17 @@ describe('parseBackupJson', () => {
     const text = JSON.stringify({ version: 1, data: { flights: { evil: true }, residence: [] } });
     const { preview, error } = parseBackupJson(text);
     expect(preview).toBeUndefined();
-    expect(error).toMatch(/invalide/i);
+    expect(error).toMatch(/invalid/i);
   });
 
   it('rejects a backup with junk flight rows', () => {
     const text = JSON.stringify({ version: 1, data: { flights: [flight, 'junk'], residence: [] } });
-    expect(parseBackupJson(text).error).toMatch(/invalide/i);
+    expect(parseBackupJson(text).error).toMatch(/invalid/i);
   });
 
   it('rejects a backup with junk residence rows', () => {
     const text = JSON.stringify({ version: 1, data: { flights: [], residence: [{ notADate: 1 }] } });
-    expect(parseBackupJson(text).error).toMatch(/invalide/i);
+    expect(parseBackupJson(text).error).toMatch(/invalid/i);
   });
 
   it('accepts a bare flights array', () => {
@@ -79,7 +79,7 @@ describe('parseBackupJson — Drive payload branch (schemaVersion)', () => {
     const text = JSON.stringify({ schemaVersion: 1, flights: [flight, 'junk'], residence: [] });
     const { preview, error } = parseBackupJson(text);
     expect(preview).toBeUndefined();
-    expect(error).toMatch(/invalide/i);
+    expect(error).toMatch(/invalid/i);
   });
 
   it('falls through to "non reconnu" when flights is not an array', () => {
@@ -247,6 +247,6 @@ describe('parseBackupJson — content hardening (M9)', () => {
     const text = JSON.stringify({ version: 1, exportDate: 'd', deviceId: 'dev', data: { flights: [evilFlight], residence: [] } });
     const { preview, error } = parseBackupJson(text);
     expect(preview).toBeUndefined();
-    expect(error).toMatch(/invalide/i);
+    expect(error).toMatch(/invalid/i);
   });
 });

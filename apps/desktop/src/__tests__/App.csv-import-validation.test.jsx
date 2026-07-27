@@ -90,8 +90,8 @@ describe('CSV import — content validation (M9)', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByText('Import invalide — certains vols sont mal formés')).toBeTruthy();
-    expect(screen.queryByText("Aperçu de l'Import")).toBeNull();
+    expect(await screen.findByText('Invalid import — some flights are malformed')).toBeTruthy();
+    expect(screen.queryByText("Import Preview")).toBeNull();
   });
 
   it('accepts a well-formed CSV row and shows the import preview', async () => {
@@ -104,7 +104,7 @@ describe('CSV import — content validation (M9)', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByText("Aperçu de l'Import")).toBeTruthy();
+    expect(await screen.findByText("Import Preview")).toBeTruthy();
     expect(screen.getByText('CSV Import')).toBeTruthy();
   });
 });

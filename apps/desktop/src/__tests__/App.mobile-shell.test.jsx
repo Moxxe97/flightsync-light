@@ -123,7 +123,7 @@ describe('App responsive shell wiring', () => {
     mobileState = { isMobile: true, section: null };
     await renderApp();
 
-    fireEvent.click(screen.getByText('Calendrier'));
+    fireEvent.click(screen.getByText('Calendar'));
     expect(openSpy).toHaveBeenCalledTimes(1);
     expect(openSpy).toHaveBeenCalledWith('calendar');
   });
@@ -135,7 +135,7 @@ describe('App responsive shell wiring', () => {
     // Section header with the section's label and a back control.
     expect(document.querySelector('.mobile-section-header')).not.toBeNull();
     expect(screen.getByText('Backup & Restore')).toBeDefined();
-    expect(screen.getByRole('button', { name: /retour/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /back to menu/i })).toBeDefined();
     // The matching section body renders; the home menu does not.
     expect(screen.getByTestId('tab-backup')).toBeDefined();
     expect(document.querySelector('.mobile-menu')).toBeNull();
@@ -147,7 +147,7 @@ describe('App responsive shell wiring', () => {
     mobileState = { isMobile: true, section: 'calendar' };
     await renderApp();
 
-    fireEvent.click(screen.getByRole('button', { name: /retour/i }));
+    fireEvent.click(screen.getByRole('button', { name: /back to menu/i }));
     expect(backSpy).toHaveBeenCalledTimes(1);
   });
 });

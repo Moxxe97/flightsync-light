@@ -66,7 +66,7 @@ function OFPPage({ pdf, pageNumber, aspectRatio }) {
         <img src={src} alt={`Page ${pageNumber}`} style={{ width: '100%', display: 'block', borderRadius: 4 }} />
       )}
       {failed && (
-        <p style={{ fontSize: 12, color: '#475569', textAlign: 'center', paddingTop: 24 }}>Page {pageNumber} illisible.</p>
+        <p style={{ fontSize: 12, color: '#475569', textAlign: 'center', paddingTop: 24 }}>Page {pageNumber} could not be rendered.</p>
       )}
     </div>
   );
@@ -138,12 +138,12 @@ export default function OFPModal({ flightId, onClose }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           columnGap: 12, padding: '14px 20px', borderBottom: '1px solid #1e2a45', flexShrink: 0,
         }}>
-          {/* minWidth: 0 + overflowWrap — sans ça, un nom de fichier insécable impose
-              sa largeur au header et pousse le X hors du cadre (overflow: hidden)
-              en portrait. */}
+          {/* minWidth: 0 + overflowWrap — without them, an unbreakable file name forces
+              its width onto the header and pushes the X out of the frame
+              (overflow: hidden) in portrait. */}
           <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>
-              {record?.flightNumber ? `${record.flightNumber} — Plan de vol` : 'Plan de vol'}
+              {record?.flightNumber ? `${record.flightNumber} — Flight plan` : 'Flight plan'}
             </div>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
               {record ? `${record.fileName} · ${(record.pageCount ?? pdf?.numPages ?? 0)} page${(record.pageCount ?? pdf?.numPages ?? 0) > 1 ? 's' : ''}` : ''}
@@ -173,7 +173,7 @@ export default function OFPModal({ flightId, onClose }) {
             </div>
           ) : error || !pdf ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <p style={{ fontSize: 12, color: '#475569' }}>Plan de vol introuvable.</p>
+              <p style={{ fontSize: 12, color: '#475569' }}>Flight plan not found.</p>
             </div>
           ) : (
             Array.from({ length: pdf.numPages }, (_, i) => (

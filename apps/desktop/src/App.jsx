@@ -36,7 +36,7 @@ import { computeAllTimeSummary, computeFiscalYear } from '@flightsync/core/tax';
 
 // ─────────────────────────────────────────────────────────
 // AIR CANADA FLIGHT TRACKER — COMPLETE SYNC SYSTEM
-// Local-first · Sauvegarde Google Drive · Calendrier
+// Local-first · Google Drive backup · Calendar
 // ─────────────────────────────────────────────────────────
 
 const STORAGE_KEYS = {
@@ -247,26 +247,26 @@ export default function FlightSyncSystem() {
   }, []);
 
   const backupArchivesToDrive = useCallback(async () => {
-    if (!authUser) { notify("Connectez Google Drive d'abord (onglet Backup)", "error"); return; }
+    if (!authUser) { notify("Connect Google Drive first (Backup tab)", "error"); return; }
     const years = await listArchiveYears();
-    if (years.length === 0) { notify("Aucune archive à sauvegarder", "info"); return; }
-    notify(`Sauvegarde de ${years.length} année(s) sur Drive…`, "info");
+    if (years.length === 0) { notify("No archives to back up", "info"); return; }
+    notify(`Backing up ${years.length} year(s) to Drive…`, "info");
     const results = await backupAllYears(years);
     const ok = results.filter((r) => r.status === 'backed-up').length;
     const skipped = results.filter((r) => r.status === 'skipped').length;
     const failed = results.filter((r) => r.status === 'error').length;
-    notify(`Drive: ${ok} sauvegardée(s), ${skipped} à jour${failed ? `, ${failed} échec(s)` : ''}`, failed ? 'error' : 'success');
+    notify(`Drive: ${ok} backed up, ${skipped} up to date${failed ? `, ${failed} failed` : ''}`, failed ? 'error' : 'success');
   }, [notify]);
 
   const restoringRef = useRef(false);
   const restoreArchivesFromDrive = useCallback(async () => {
-    if (!authUser) { notify("Connectez Google Drive d'abord (onglet Backup)", "error"); return; }
+    if (!authUser) { notify("Connect Google Drive first (Backup tab)", "error"); return; }
     if (restoringRef.current) return; // guard: no concurrent/double-click restores
     restoringRef.current = true;
     try {
-      notify("Recherche d'archives sur Drive…", "info");
+      notify("Looking for archives on Drive…", "info");
       const results = await restoreAllFromDrive();
-      if (results.length === 0) { notify("Aucune archive trouvée sur Drive", "info"); return; }
+      if (results.length === 0) { notify("No archives found on Drive", "info"); return; }
       const restored = results.filter((r) => r.status === 'restored').length;
       const failed = results.filter((r) => r.status === 'error').length;
       try {
@@ -276,9 +276,9 @@ export default function FlightSyncSystem() {
       } catch (err) {
         console.error('[restore] post-restore refresh failed:', err);
       }
-      notify(`Drive: ${restored} année(s) restaurée(s)${failed ? `, ${failed} échec(s)` : ''}`, failed ? 'error' : 'success');
+      notify(`Drive: ${restored} year(s) restored${failed ? `, ${failed} failed` : ''}`, failed ? 'error' : 'success');
     } catch (err) {
-      notify(`Erreur de restauration: ${err.message}`, 'error');
+      notify(`Restore error: ${err.message}`, 'error');
     } finally {
       restoringRef.current = false;
     }
@@ -315,7 +315,7 @@ export default function FlightSyncSystem() {
         await loadAllData();
       } catch (err) {
         console.error("Init error:", err);
-        notify("Erreur d'initialisation du stockage", "error");
+        notify("Storage initialization error", "error");
       }
       setIsLoading(false);
     };
@@ -357,11 +357,11 @@ export default function FlightSyncSystem() {
       if (normChanged.length) {
         flightsData = normalizedFlights;
         await storage.set(STORAGE_KEYS.FLIGHTS, JSON.stringify(flightsData));
-        console.info(`[migrate] ${normChanged.length} vol(s) normalisés ICAO→IATA`);
+        console.info(`[migrate] ${normChanged.length} flight(s) normalized ICAO→IATA`);
       }
 
       setFlights(flightsData);
-      // Calendrier Fiscal residency is sourced from Google Calendar pull, not local flights.
+      // Fiscal-calendar residency comes from the day panel, not local flights.
       setResidence(residenceData);
       setSettings((prev) => ({ ...prev, ...settingsData }));
       setBackupState((prev) => ({
@@ -375,7 +375,7 @@ export default function FlightSyncSystem() {
 
   // ─── DRIVE BACKUP RUNNER ─────────────────────────────
   // The single Drive-backup path shared by the auto-scheduler, the manual
-  // header/Dashboard "Sauvegarder" action, and saveToGDrive (overdue banner /
+  // header/Dashboard "Back up" action, and saveToGDrive (overdue banner /
   // BackupTab). Always includeBlobs:true — driveBackup skips already-uploaded
   // PDFs by name, so the steady-state cost is one cheap JSON PATCH.
   const runDriveBackup = useCallback(async ({ manual = false } = {}) => {
@@ -384,7 +384,7 @@ export default function FlightSyncSystem() {
     // declined restore). Manual and auto paths both route through here, so this
     // is the single source of truth for the empty guard.
     if (flights.length === 0 && residence.length === 0) {
-      if (manual) notify('Aucune donnée à sauvegarder', 'info');
+      if (manual) notify('No data to back up', 'info');
       return;
     }
     setBackupState((s) => ({ ...s, status: 'syncing' }));
@@ -394,7 +394,7 @@ export default function FlightSyncSystem() {
       setBackupState((s) => ({
         status: 'success',
         lastBackup: at,
-        log: [{ at, action: 'backup', detail: manual ? 'Sauvegarde manuelle' : 'Sauvegarde automatique' }, ...s.log].slice(0, 50),
+        log: [{ at, action: 'backup', detail: manual ? 'Manual backup' : 'Automatic backup' }, ...s.log].slice(0, 50),
       }));
       // Persist lastBackup directly (NOT via setSettings — that would re-arm the
       // auto-backup timer through the scheduler effect's `settings` dep → loop).
@@ -411,7 +411,7 @@ export default function FlightSyncSystem() {
         status: 'error',
         log: [{ at: now(), action: 'backup_error', detail: err.message }, ...s.log].slice(0, 50),
       }));
-      if (manual) notify(`Échec de la sauvegarde: ${err.message}`, 'error');
+      if (manual) notify(`Backup failed: ${err.message}`, 'error');
       // Auto-backup failures stay quiet; the next data change reschedules a retry.
     }
   }, [authUser, flights, residence, settings, notify]);
@@ -468,30 +468,30 @@ export default function FlightSyncSystem() {
         flights: nextFlights, residence: nextResidence, settings: nextSettings,
       });
     } catch (err) {
-      notify(`Restauration annulée : stockage insuffisant (${err.message})`, 'error');
+      notify(`Restore cancelled: not enough storage (${err.message})`, 'error');
       return;
     }
 
     setFlights(nextFlights);
     setResidence(nextResidence);
     if (nextSettings) setSettings(nextSettings);
-    notify('Données restaurées depuis Google Drive', 'success');
+    notify('Data restored from Google Drive', 'success');
 
     // Re-download the PDF mirror (OFPs / boarding passes). A blob failure here
     // doesn't undo the JSON restore — the flights/residence are already in place.
     try {
       const { ofps, boardingPasses, skipped } = await restoreBlobs(nextFlights);
-      const skippedNote = skipped ? ` · ${skipped} ignoré(s) (format invalide)` : '';
+      const skippedNote = skipped ? ` · ${skipped} skipped (invalid format)` : '';
       if (ofps || boardingPasses || skipped) {
         // 'error' when everything that came off Drive was rejected by the M8
         // content check (nothing actually recovered) — otherwise a partial
         // or full success, even if some files were skipped along the way.
-        notify(`${ofps} OFP et ${boardingPasses} cartes récupérés${skippedNote}`, (ofps || boardingPasses) ? 'success' : 'error');
+        notify(`${ofps} OFPs and ${boardingPasses} passes recovered${skippedNote}`, (ofps || boardingPasses) ? 'success' : 'error');
       }
       await refreshOFPIds();
       await refreshBoardingPassDates();
     } catch (err) {
-      notify(`Données restaurées, mais PDF incomplets: ${err.message}`, 'error');
+      notify(`Data restored, but PDFs incomplete: ${err.message}`, 'error');
     }
   }, [settings, notify, refreshOFPIds, refreshBoardingPassDates]);
 
@@ -508,15 +508,15 @@ export default function FlightSyncSystem() {
     return () => { cancelled = true; };
   }, [authUser, isLoading, flights.length, residence.length]);
 
-  // Manual "Sauvegarder" (header + Dashboard quick action): persist the local
+  // Manual "Back up" (header + Dashboard quick action): persist the local
   // snapshot, then push to Drive through the shared runner.
   const syncToCloud = async () => {
     if (!authUser) {
-      notify("Connectez un compte Google (onglet Backup) pour sauvegarder", "error");
+      notify("Connect a Google account (Backup tab) to back up", "error");
       return;
     }
     // The empty-state guard lives in runDriveBackup (single source of truth) —
-    // it notifies "Aucune donnée à sauvegarder" and bails before any Drive PATCH.
+    // it notifies "No data to back up" and bails before any Drive PATCH.
     const timestamp = now();
     const flightPayload = JSON.stringify(
       flights.map((f) => ({ ...f, _lastModified: f._lastModified || timestamp, _deviceId: f._deviceId || deviceId }))
@@ -572,7 +572,7 @@ export default function FlightSyncSystem() {
     const invoke = window.__TAURI_INTERNALS__?.invoke;
     if (!invoke) return;
     const folder = await invoke('plugin:dialog|open', {
-      options: { directory: true, title: 'Choisir le dossier de sauvegarde' },
+      options: { directory: true, title: 'Choose the backup folder' },
     });
     if (typeof folder === 'string' && folder) {
       // Grant the fs plugin's runtime scope access to exactly this folder
@@ -584,9 +584,9 @@ export default function FlightSyncSystem() {
         const newSettings = { ...settings, backupFolder: folder };
         setSettings(newSettings);
         await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
-        notify('Dossier de sauvegarde configuré', 'success');
+        notify('Backup folder configured', 'success');
       } catch (err) {
-        notify(`Impossible d'autoriser l'accès au dossier : ${err.message}`, 'error');
+        notify(`Could not grant access to the folder: ${err.message}`, 'error');
       }
     }
   };
@@ -608,9 +608,9 @@ export default function FlightSyncSystem() {
       if (error) { notify(error, 'error'); return; }
       // Same merge-or-replace preview as a file import; the tag makes the
       // confirm step also restore the folder's PDF mirrors.
-      setImportPreview({ ...preview, device: 'dossier local', _folderBlobs: settings.backupFolder });
+      setImportPreview({ ...preview, device: 'local folder', _folderBlobs: settings.backupFolder });
     } catch (err) {
-      notify(`Lecture du dossier impossible : ${err.message}`, 'error');
+      notify(`Could not read the folder: ${err.message}`, 'error');
     }
   };
 
@@ -648,13 +648,13 @@ export default function FlightSyncSystem() {
     const newSettings = { ...settings, lastBackup: now() };
     setSettings(newSettings);
     storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
-    notify("Backup JSON exporté avec succès", "success");
+    notify("JSON backup exported successfully", "success");
   };
 
   // ─── GOOGLE DRIVE AUTO-BACKUP ──────────────────────────
   const saveToGDrive = useCallback(async () => {
     if (!authUser) {
-      notify("Connectez un compte Google (onglet Backup) pour sauvegarder", "error");
+      notify("Connect a Google account (Backup tab) to back up", "error");
       return false;
     }
     try {
@@ -672,10 +672,10 @@ export default function FlightSyncSystem() {
 
   const exportToCSV = () => {
     if (flights.length === 0) {
-      notify("Aucun vol à exporter", "error");
+      notify("No flights to export", "error");
       return;
     }
-    const headers = ["Date", "Vol", "Départ", "Arrivée", "Temps Total (h)", "Temps Canada (h)", "% Canada", "Distance (nm)", "Distance Canada (nm)", "Notes"];
+    const headers = ["Date", "Flight", "Departure", "Arrival", "Total Time (h)", "Canada Time (h)", "% Canada", "Distance (nm)", "Canada Distance (nm)", "Notes"];
     const rows = [...flights]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((f) => [
@@ -693,7 +693,7 @@ export default function FlightSyncSystem() {
     a.download = `AC-Flights-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    notify("Export CSV réussi", "success");
+    notify("CSV export complete", "success");
   };
 
   // Tauri WKWebView doesn't reliably open native file pickers from <input type="file">,
@@ -723,7 +723,7 @@ export default function FlightSyncSystem() {
         const filename = String(filePath).split('/').pop();
         processImportText(text, filename);
       } catch (err) {
-        notify(`Erreur ouverture fichier: ${err.message || err}`, 'error');
+        notify(`Error opening file: ${err.message || err}`, 'error');
       }
     } else {
       fileInputRef.current?.click();
@@ -758,7 +758,7 @@ export default function FlightSyncSystem() {
           const sep = ext === "tsv" ? "\t" : ",";
           const lines = text.split("\n").filter((l) => l.trim());
           if (lines.length < 2) {
-            notify("CSV vide ou invalide", "error");
+            notify("Empty or invalid CSV", "error");
             return;
           }
           const headers = lines[0].split(sep).map((h) => h.trim().replace(/^"|"$/g, "").toLowerCase());
@@ -774,7 +774,7 @@ export default function FlightSyncSystem() {
           const notesCol = headers.findIndex((h) => h.includes("note"));
 
           if (dateCol === -1) {
-            notify("Colonne 'Date' introuvable dans le CSV", "error");
+            notify("'Date' column not found in the CSV", "error");
             return;
           }
 
@@ -800,7 +800,7 @@ export default function FlightSyncSystem() {
           }
 
           if (parsedFlights.length === 0) {
-            notify("Aucun vol trouvé dans le CSV", "error");
+            notify("No flights found in the CSV", "error");
             return;
           }
 
@@ -811,7 +811,7 @@ export default function FlightSyncSystem() {
           // JSON import path (parseBackupJson) and reject the whole import
           // rather than silently dropping or accepting malformed rows.
           if (!parsedFlights.every(isValidFlight)) {
-            notify("Import invalide — certains vols sont mal formés", "error");
+            notify("Invalid import — some flights are malformed", "error");
             return;
           }
 
@@ -824,12 +824,12 @@ export default function FlightSyncSystem() {
             device: "CSV Import",
           });
         } catch (err) {
-          notify("Erreur de lecture du CSV: " + err.message, "error");
+          notify("CSV read error: " + err.message, "error");
         }
       }
       // ─── Unsupported ───
       else {
-        notify(`Format .${ext} non supporté. Utilise JSON ou CSV.`, "error");
+        notify(`.${ext} format not supported. Use JSON or CSV.`, "error");
       }
     }
   };
@@ -867,7 +867,7 @@ export default function FlightSyncSystem() {
     await storage.set(STORAGE_KEYS.RESIDENCE, JSON.stringify(finalResidence));
 
     setImportPreview(null);
-    notify(`Import ${strategy === "replace" ? "complet" : "fusionné"} réussi`, "success");
+    notify(`${strategy === "replace" ? "Full" : "Merged"} import complete`, "success");
 
     // If this restore came from a local folder, re-import the PDF mirror.
     if (importPreview._folderBlobs) {
@@ -876,7 +876,7 @@ export default function FlightSyncSystem() {
         if (ofps || boardingPasses) {
           await refreshBoardingPassDates();
           refreshOFPIds();
-          notify(`${ofps} OFP + ${boardingPasses} boarding pass restaurés depuis le dossier`, 'success');
+          notify(`${ofps} OFPs + ${boardingPasses} boarding passes restored from the folder`, 'success');
         }
       } catch (err) {
         console.warn('[folder-restore-blobs] failed:', err);
@@ -886,9 +886,9 @@ export default function FlightSyncSystem() {
 
   // ─── CALENDAR SYNC ───────────────────────────────────
   const handleExportICS = () => {
-    if (flights.length === 0) { notify("Aucun vol à exporter", "info"); return; }
+    if (flights.length === 0) { notify("No flights to export", "info"); return; }
     exportICS(flights);
-    notify(`${flights.length} vol(s) exportés en .ics`, "success");
+    notify(`${flights.length} flight(s) exported to .ics`, "success");
   };
 
   // ─── DAY PANEL SAVE ─────────────────────────────────
@@ -923,9 +923,9 @@ export default function FlightSyncSystem() {
       setFlights([]);
       setResidence([]);
       setBackupState((prev) => ({ ...prev, log: [] }));
-      notify("Toutes les données ont été supprimées", "info");
+      notify("All data has been deleted", "info");
     } catch {
-      notify("Erreur lors de la suppression", "error");
+      notify("Error while deleting", "error");
     }
   };
 
@@ -950,8 +950,8 @@ export default function FlightSyncSystem() {
     storage.set(STORAGE_KEYS.FLIGHTS, JSON.stringify(allFlights));
     setFlights(allFlights);
     const parts = [];
-    if (added) parts.push(`${added} vol(s) importé(s)`);
-    if (updated) parts.push(`${updated} vol(s) mis à jour`);
+    if (added) parts.push(`${added} flight(s) imported`);
+    if (updated) parts.push(`${updated} flight(s) updated`);
     notify(parts.join(', '), 'success');
     refreshOFPIds();
   }, [flights, deviceId, notify, refreshOFPIds]);
@@ -976,12 +976,12 @@ export default function FlightSyncSystem() {
         await storage.set(STORAGE_KEYS.FLIGHTS, JSON.stringify(allFlights));
         setFlights(allFlights);
       }
-      const parts = [`${stats.updated} vol(s) recalculé(s)`, `${stats.unchanged} inchangé(s)`];
-      if (stats.noOfp) parts.push(`${stats.noOfp} sans OFP stocké`);
-      if (stats.failed) parts.push(`${stats.failed} échec(s)`);
-      notify('Recalcul terminé : ' + parts.join(', '), stats.failed ? 'info' : 'success');
+      const parts = [`${stats.updated} flight(s) recomputed`, `${stats.unchanged} unchanged`];
+      if (stats.noOfp) parts.push(`${stats.noOfp} without a stored OFP`);
+      if (stats.failed) parts.push(`${stats.failed} failed`);
+      notify('Recompute complete: ' + parts.join(', '), stats.failed ? 'info' : 'success');
     } catch (err) {
-      notify('Recalcul échoué : ' + (err?.message || 'erreur inconnue'), 'error');
+      notify('Recompute failed: ' + (err?.message || 'unknown error'), 'error');
     } finally {
       setRescoreBusy(null);
     }
@@ -1069,14 +1069,14 @@ export default function FlightSyncSystem() {
           authUser={authUser}
           backupState={backupState}
           lastBackup={backupState.lastBackup}
-          onSignIn={() => signInWithGoogle().then(() => notify('Connecté', 'success')).catch((e) => notify(e.message, 'error'))}
+          onSignIn={() => signInWithGoogle().then(() => notify('Signed in', 'success')).catch((e) => notify(e.message, 'error'))}
           onSignOutRequest={() => setSignOutConfirm(true)}
           onBackupNow={() => runDriveBackup({ manual: true })}
           onRestoreRequest={async () => {
             try {
               const found = await findBackup();
               if (found) setRestoreOffer(found);
-              else notify('Aucune sauvegarde trouvée sur ce compte', 'error');
+              else notify('No backup found on this account', 'error');
             } catch (err) {
               notify(err.message, 'error');
             }
@@ -1134,7 +1134,7 @@ export default function FlightSyncSystem() {
       <div style={{ minHeight: "100vh", background: "#0a0f1e", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ width: 48, height: 48, border: "3px solid rgba(99,179,237,0.2)", borderTop: "3px solid #63b3ed", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 20px" }} />
-          <p style={{ color: "#a0aec0", fontSize: 14, letterSpacing: "0.05em" }}>CHARGEMENT DES DONNÉES...</p>
+          <p style={{ color: "#a0aec0", fontSize: 14, letterSpacing: "0.05em" }}>LOADING DATA...</p>
         </div>
       </div>
     );
@@ -1167,36 +1167,36 @@ export default function FlightSyncSystem() {
           display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
         }}>
           <div className="card" style={{ maxWidth: 500, width: "100%", animation: "slideIn 0.3s ease" }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: "#63b3ed" }}>Aperçu de l'Import</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, color: "#63b3ed" }}>Import Preview</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
               <div style={{ padding: 14, background: "#0a0f1e", borderRadius: 10, textAlign: "center" }}>
                 <div className="mono" style={{ fontSize: 24, color: "#63b3ed" }}>{importPreview.flights}</div>
-                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>VOLS</div>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>FLIGHTS</div>
               </div>
               <div style={{ padding: 14, background: "#0a0f1e", borderRadius: 10, textAlign: "center" }}>
                 <div className="mono" style={{ fontSize: 24, color: "#63b3ed" }}>{importPreview.residence}</div>
-                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>JOURS RÉSIDENCE</div>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>RESIDENCE DAYS</div>
               </div>
             </div>
             <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>
-              <span className="mono">{formatDate(importPreview.date)}</span> · Appareil: <span className="mono">{importPreview.device}</span>
+              <span className="mono">{formatDate(importPreview.date)}</span> · Device: <span className="mono">{importPreview.device}</span>
             </div>
 
             <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #1e2a45" }}>
-              <p style={{ fontSize: 13, color: "#a0aec0", marginBottom: 16 }}>Stratégie d'import :</p>
+              <p style={{ fontSize: 13, color: "#a0aec0", marginBottom: 16 }}>Import strategy:</p>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button className="btn btn-primary" onClick={() => executeImport("merge")}>
-                  <Icons.Merge /> Fusionner
+                  <Icons.Merge /> Merge
                 </button>
                 <button className="btn btn-danger" onClick={() => executeImport("replace")}>
-                  Remplacer tout
+                  Replace all
                 </button>
                 <button className="btn btn-secondary" onClick={() => setImportPreview(null)}>
-                  Annuler
+                  Cancel
                 </button>
               </div>
               <p style={{ fontSize: 11, color: "#475569", marginTop: 12 }}>
-                Fusionner = ajoute les nouveaux vols sans toucher les existants. Remplacer = écrase tout.
+                Merge = adds new flights without touching existing ones. Replace = overwrites everything.
               </p>
             </div>
           </div>
@@ -1250,7 +1250,7 @@ export default function FlightSyncSystem() {
             <select
               value={viewYear ?? ''}
               onChange={(e) => enterYear(e.target.value || null)}
-              title="Voir une année archivée"
+              title="View an archived year"
               style={{
                 background: viewYear ? "#3b1d05" : "#0f1525",
                 color: viewYear ? "#fbbf24" : "#a0aec0",
@@ -1259,7 +1259,7 @@ export default function FlightSyncSystem() {
                 fontFamily: "inherit", cursor: "pointer",
               }}
             >
-              <option value="">Année en cours ({currentYear})</option>
+              <option value="">Current year ({currentYear})</option>
               {yearOptions.map((y) => (
                 <option key={y} value={y}>{y} (archive)</option>
               ))}
@@ -1276,20 +1276,20 @@ export default function FlightSyncSystem() {
               animation: backupState.status === "syncing" ? "syncPulse 1.5s infinite" : "none",
             }} />
             <span style={{ fontSize: 12, color: "#a0aec0" }}>
-              {backupState.status === "syncing" ? "Sauvegarde..." : backupState.status === "success" ? "Sauvegardé" : backupState.status === "error" ? "Erreur" : timeSince(backupState.lastBackup)}
+              {backupState.status === "syncing" ? "Backing up..." : backupState.status === "success" ? "Backed up" : backupState.status === "error" ? "Error" : timeSince(backupState.lastBackup)}
             </span>
           </div>
 
           <button className="btn btn-primary" onClick={syncToCloud} disabled={backupState.status === "syncing"} style={{ padding: "8px 16px" }}>
             <span style={{ display: "flex", animation: backupState.status === "syncing" ? "spin 1s linear infinite" : "none" }}><Icons.Sync /></span>
-            Sauvegarder
+            Back up
           </button>
 
           <button
             className="btn btn-secondary"
             onClick={toggleFullscreen}
             style={{ padding: "8px 12px" }}
-            title={isFullscreen ? "Quitter plein écran" : "Plein écran"}
+            title={isFullscreen ? "Exit full screen" : "Full screen"}
           >
             {isFullscreen ? <Icons.ExitFullscreen /> : <Icons.Fullscreen />}
           </button>
@@ -1307,21 +1307,21 @@ export default function FlightSyncSystem() {
             style={{ padding: "4px 10px", fontSize: 12 }}
             onClick={() => enterYear(adjacentYear(yearOptions, viewYear, -1))}
             disabled={!adjacentYear(yearOptions, viewYear, -1)}
-            title="Année plus ancienne"
+            title="Older year"
           >‹</button>
-          <span style={{ fontWeight: 600 }}>📅 Vue {viewYear} — lecture seule</span>
+          <span style={{ fontWeight: 600 }}>📅 Viewing {viewYear} — read-only</span>
           <button
             className="btn btn-secondary"
             style={{ padding: "4px 10px", fontSize: 12 }}
             onClick={() => enterYear(adjacentYear(yearOptions, viewYear, +1))}
             disabled={!adjacentYear(yearOptions, viewYear, +1)}
-            title="Année plus récente"
+            title="Newer year"
           >›</button>
           <button
             className="btn btn-primary"
             style={{ padding: "4px 12px", fontSize: 12 }}
             onClick={() => setViewYear(null)}
-          >Quitter — revenir à {currentYear}</button>
+          >Exit — back to {currentYear}</button>
         </div>
       )}
       {isMobile ? (
@@ -1401,7 +1401,7 @@ export default function FlightSyncSystem() {
             }}
           >
             <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', marginBottom: 10 }}>
-              Supprimer ce vol ?
+              Delete this flight?
             </div>
             <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 24 }}>
               {deleteConfirm.flightNumber} — {deleteConfirm.date}
@@ -1412,7 +1412,7 @@ export default function FlightSyncSystem() {
                 style={{ padding: '8px 20px', fontSize: 13 }}
                 onClick={() => setDeleteConfirm(null)}
               >
-                Annuler
+                Cancel
               </button>
               <button
                 style={{
@@ -1422,7 +1422,7 @@ export default function FlightSyncSystem() {
                 }}
                 onClick={() => { deleteFlight(deleteConfirm.id); setDeleteConfirm(null); }}
               >
-                Supprimer
+                Delete
               </button>
             </div>
           </div>
@@ -1431,34 +1431,34 @@ export default function FlightSyncSystem() {
 
       <ConfirmModal
         open={signOutConfirm}
-        title="Se déconnecter ?"
-        message="Vos données restent sur ce Mac; la sauvegarde Drive reste sur votre compte Google."
-        confirmLabel="Se déconnecter"
-        cancelLabel="Annuler"
-        onConfirm={() => { setSignOutConfirm(false); signOut().catch((e) => notify(e?.message || "Échec de la déconnexion", "error")); }}
+        title="Sign out?"
+        message="Your data stays on this Mac; the Drive backup stays on your Google account."
+        confirmLabel="Sign out"
+        cancelLabel="Cancel"
+        onConfirm={() => { setSignOutConfirm(false); signOut().catch((e) => notify(e?.message || "Sign-out failed", "error")); }}
         onCancel={() => setSignOutConfirm(false)}
       />
 
       <ConfirmModal
         open={!!restoreOffer}
-        title="Sauvegarde trouvée sur Google Drive"
-        message="Restaurer va REMPLACER les vols et jours de résidence de ce Mac par le contenu de la sauvegarde Google Drive. Un instantané des données actuelles est conservé localement avant l'écrasement, mais il n'y a pas encore de bouton d'annulation en un clic."
-        confirmLabel="Restaurer"
-        cancelLabel="Plus tard"
+        title="Backup found on Google Drive"
+        message="Restoring will REPLACE this Mac's flights and residence days with the contents of the Google Drive backup. A snapshot of the current data is kept locally before the overwrite, but there is no one-click undo button yet."
+        confirmLabel="Restore"
+        cancelLabel="Later"
         onConfirm={() => {
           const offer = restoreOffer;
           setRestoreOffer(null);
-          if (offer) restoreFromDrive(offer.fileId).catch((err) => notify(`Échec de la restauration: ${err.message}`, 'error'));
+          if (offer) restoreFromDrive(offer.fileId).catch((err) => notify(`Restore failed: ${err.message}`, 'error'));
         }}
         onCancel={() => { restoreOfferDismissedRef.current = true; setRestoreOffer(null); }}
       />
 
       <ConfirmModal
         open={clearAllConfirm}
-        title="Supprimer TOUTES les données ?"
-        message="Cette action est irréversible. Assurez-vous d'avoir un backup avant de continuer."
-        confirmLabel="Supprimer"
-        cancelLabel="Annuler"
+        title="Delete ALL data?"
+        message="This action is irreversible. Make sure you have a backup before continuing."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
         danger
         onConfirm={() => { setClearAllConfirm(false); performClearAllData(); }}
         onCancel={() => setClearAllConfirm(false)}
@@ -1466,10 +1466,10 @@ export default function FlightSyncSystem() {
 
       <ConfirmModal
         open={rescoreConfirm}
-        title="Recalculer depuis les OFP stockés ?"
-        message="Les heures et distances canadiennes de chaque vol ayant un OFP stocké seront recalculées avec la frontière corrigée. Les vols modifiés à la main gardent leurs heures totales et leurs notes."
-        confirmLabel="Recalculer"
-        cancelLabel="Annuler"
+        title="Recompute from stored OFPs?"
+        message="Canadian hours and distances for every flight with a stored OFP will be recomputed with the corrected boundary. Hand-edited flights keep their total hours and notes."
+        confirmLabel="Recompute"
+        cancelLabel="Cancel"
         onConfirm={handleRescoreOfps}
         onCancel={() => setRescoreConfirm(false)}
       />

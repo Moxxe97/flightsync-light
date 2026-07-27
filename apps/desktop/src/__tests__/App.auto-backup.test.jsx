@@ -94,7 +94,7 @@ async function renderApp() {
 }
 
 // Import a JSON backup through the real hidden file input → preview modal →
-// "Remplacer tout", which calls setFlights — a real App data change the
+// "Replace all", which calls setFlights — a real App data change the
 // scheduler effect observes.
 async function importBackup(text) {
   const input = document.querySelector('input[type="file"]');
@@ -109,7 +109,7 @@ async function importBackup(text) {
     await Promise.resolve();
   });
   // Confirm the import (replace strategy) → setFlights.
-  const replaceBtn = await screen.findByText('Remplacer tout');
+  const replaceBtn = await screen.findByText('Replace all');
   await act(async () => {
     fireEvent.click(replaceBtn);
     await Promise.resolve();

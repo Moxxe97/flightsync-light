@@ -79,10 +79,10 @@ describe('ErrorBoundary reset escape', () => {
 
   it('offers a reset button behind a two-step confirm', () => {
     renderCrashed(() => {});
-    const btn = screen.getByText('Réinitialiser les données locales');
+    const btn = screen.getByText('Reset local data');
     fireEvent.click(btn);
-    expect(screen.getByText(/irréversible/i)).toBeTruthy();
-    expect(screen.getByText('Confirmer la réinitialisation')).toBeTruthy();
+    expect(screen.getByText(/irreversible/i)).toBeTruthy();
+    expect(screen.getByText('Confirm reset')).toBeTruthy();
   });
 
   it('clears allowlisted localStorage keys and reloads on confirm', () => {
@@ -92,8 +92,8 @@ describe('ErrorBoundary reset escape', () => {
     localStorage.setItem('unrelated-key', 'keep');
     const reload = vi.fn();
     renderCrashed(reload);
-    fireEvent.click(screen.getByText('Réinitialiser les données locales'));
-    fireEvent.click(screen.getByText('Confirmer la réinitialisation'));
+    fireEvent.click(screen.getByText('Reset local data'));
+    fireEvent.click(screen.getByText('Confirm reset'));
     expect(localStorage.getItem('ac-flights-data')).toBeNull();
     expect(localStorage.getItem('ac-residence-data')).toBeNull();
     expect(localStorage.getItem('ac-flights-archive-2024')).toBe('[]');

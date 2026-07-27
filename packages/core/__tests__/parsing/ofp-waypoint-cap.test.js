@@ -51,6 +51,6 @@ describe('parseWaypointsFromOFP — waypoint cap (audit M4, CPU-exhaustion DoS)'
     const { flights, warning } = parseOfp(text);
     expect(flights).toHaveLength(1);
     expect(warning).toBeTruthy();
-    expect(flights[0].notes).toContain('tronqué');
+    expect(flights[0].notes).toContain('truncated');
   });
 });

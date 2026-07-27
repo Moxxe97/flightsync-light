@@ -12,8 +12,8 @@ const LOCATION_EMOJIS = {
   international: "🌍",
   transit: "✈️",
 };
-const MONTH_NAMES = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-const DAY_NAMES = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function CalendarTab({
   residence,
@@ -42,12 +42,12 @@ export default function CalendarTab({
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.04em", margin: 0 }}>
-            CALENDRIER FISCAL {year}
+            FISCAL CALENDAR {year}
           </h3>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {[
               { color: "#ef4444", label: "🏠 Canada" },
-              { color: "#10b981", label: "🌴 Mexique" },
+              { color: "#10b981", label: "🌴 Mexico" },
               { color: "#3b82f6", label: "🌍 International" },
               { color: "#f59e0b", label: "✈️ Transit" },
             ].map((item) => (
@@ -85,7 +85,7 @@ export default function CalendarTab({
                 <h4 style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>
                   {MONTH_NAMES[month]} {year}
                 </h4>
-                <span style={{ fontSize: 11, color: "#475569" }}>{totalTracked}/{daysInMonth} jours</span>
+                <span style={{ fontSize: 11, color: "#475569" }}>{totalTracked}/{daysInMonth} days</span>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 6 }}>
@@ -179,7 +179,7 @@ export default function CalendarTab({
                     background: `${LOCATION_COLORS[loc]}15`, borderRadius: 6, fontSize: 11,
                   }}>
                     <div style={{ width: 8, height: 8, borderRadius: 3, background: LOCATION_COLORS[loc] }} />
-                    <span style={{ color: LOCATION_COLORS[loc], fontWeight: 600 }}>{count}j</span>
+                    <span style={{ color: LOCATION_COLORS[loc], fontWeight: 600 }}>{count}d</span>
                   </div>
                 ))}
               </div>
@@ -190,7 +190,7 @@ export default function CalendarTab({
 
       <div className="card" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.04em", marginBottom: 16 }}>
-          RÉSUMÉ CUMULATIF
+          YEAR-TO-DATE SUMMARY
         </h3>
         {(() => {
           const counts = tallyResidence(residence);
@@ -204,10 +204,10 @@ export default function CalendarTab({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
                 {[
                   { label: "🏠 Canada", count: counts.canada, color: "#ef4444" },
-                  { label: "🌴 Mexique", count: counts.mexico, color: "#10b981" },
+                  { label: "🌴 Mexico", count: counts.mexico, color: "#10b981" },
                   { label: "🌍 International", count: counts.international, color: "#3b82f6" },
                   { label: "✈️ Transit", count: counts.transit, color: "#f59e0b" },
-                  { label: "Total suivi", count: counts.total, color: "#94a3b8" },
+                  { label: "Total tracked", count: counts.total, color: "#94a3b8" },
                 ].map((item) => (
                   <div key={item.label} style={{ padding: 12, background: "#0a0f1e", borderRadius: 10, textAlign: "center" }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: item.color }}>{item.count}</div>
@@ -217,8 +217,8 @@ export default function CalendarTab({
               </div>
               <div style={{ padding: 16, background: "#0a0f1e", borderRadius: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                  <span style={{ color: "#94a3b8" }}>Jours hors Canada : <strong style={{ color: "#f1f5f9" }}>{outsideCanada}</strong> / 183</span>
-                  <span style={{ color: barColor, fontWeight: 600 }}>Marge : {margin} jours</span>
+                  <span style={{ color: "#94a3b8" }}>Days outside Canada: <strong style={{ color: "#f1f5f9" }}>{outsideCanada}</strong> / 183</span>
+                  <span style={{ color: barColor, fontWeight: 600 }}>Margin: {margin} days</span>
                 </div>
                 <div style={{ height: 10, background: "#1e293b", borderRadius: 5, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: 5, transition: "width 0.6s ease" }} />

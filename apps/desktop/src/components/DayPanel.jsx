@@ -10,7 +10,7 @@ import {
 
 const OPTIONS = [
   { key: 'canada',        emoji: '🏠', label: 'Canada',        color: '#ef4444' },
-  { key: 'mexico',        emoji: '🌴', label: 'Mexique',       color: '#10b981' },
+  { key: 'mexico',        emoji: '🌴', label: 'Mexico',       color: '#10b981' },
   { key: 'international', emoji: '🌍', label: 'International', color: '#3b82f6' },
   { key: 'transit',       emoji: '✈️', label: 'Transit',       color: '#f59e0b' },
 ];
@@ -58,7 +58,7 @@ export default function DayPanel({
       await refreshPasses();
       onPassesChanged();
     } catch (err) {
-      setBpError(`Erreur boarding pass : ${err.message}`);
+      setBpError(`Boarding pass error: ${err.message}`);
     }
   };
 
@@ -69,12 +69,12 @@ export default function DayPanel({
       await refreshPasses();
       onPassesChanged();
     } catch (err) {
-      setBpError(`Erreur boarding pass : ${err.message}`);
+      setBpError(`Boarding pass error: ${err.message}`);
     }
   };
 
   const weekday = new Date(date + 'T12:00:00')
-    .toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' });
+    .toLocaleDateString('en-CA', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const btnBase = {
     padding: '10px 8px', borderRadius: 10, cursor: readOnly ? 'default' : 'pointer',
@@ -117,13 +117,13 @@ export default function DayPanel({
             marginTop: 8, width: '100%', padding: '7px 12px', borderRadius: 8, cursor: 'pointer',
             background: 'transparent', border: '1px solid #374151', color: '#94a3b8', fontSize: 12,
           }}>
-            Effacer
+            Clear
           </button>
         )}
 
         <div style={sectionTitle}>BOARDING PASS</div>
         {passes.length === 0 && (
-          <div style={{ fontSize: 12, color: '#475569' }}>Aucun boarding pass</div>
+          <div style={{ fontSize: 12, color: '#475569' }}>No boarding passes</div>
         )}
         {passes.map((bp) => (
           <div key={bp.id} style={{
@@ -138,7 +138,7 @@ export default function DayPanel({
               📎 {bp.fileName}
             </button>
             {!readOnly && (
-              <button title="Supprimer" onClick={() => removePass(bp.id)} style={{
+              <button title="Delete" onClick={() => removePass(bp.id)} style={{
                 background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 13,
               }}>
                 🗑
@@ -155,7 +155,7 @@ export default function DayPanel({
               width: '100%', padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
               background: '#0a0f1e', border: '1px dashed #2d3a55', color: '#94a3b8', fontSize: 12,
             }}>
-              + Ajouter un fichier (PDF / image)
+              + Add a file (PDF / image)
             </button>
             <input
               ref={fileInputRef} type="file" accept="application/pdf,image/*" multiple
@@ -170,7 +170,7 @@ export default function DayPanel({
           value={notes}
           readOnly={readOnly}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder={readOnly ? '' : 'Hôtel, rotation, contexte…'}
+          placeholder={readOnly ? '' : 'Hotel, pairing, context…'}
           rows={3}
           style={{
             width: '100%', boxSizing: 'border-box', resize: 'vertical',
@@ -184,7 +184,7 @@ export default function DayPanel({
           marginTop: 14, width: '100%', padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
           background: '#1e2a45', border: '1px solid #2d3748', color: '#e2e8f0', fontSize: 13, fontWeight: 600,
         }}>
-          Fermer
+          Close
         </button>
       </div>
     </div>

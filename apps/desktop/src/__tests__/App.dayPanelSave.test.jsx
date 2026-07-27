@@ -5,9 +5,9 @@
 //
 // Tests 1–4 cover:
 //   1. Clicking 'Canada' classification → persists { date, location: 'canada', _source: 'manual' }
-//   2. Clicking 'Mexique' + typing a note → persists { location: 'mexico', notes: 'hôtel Riu' }
-//   3. Note-only (no classification) then Fermer → persists { location: null, notes: … }
-//   4. With a seeded entry, clicking Effacer + clearing textarea then Fermer → removes the entry
+//   2. Clicking 'Mexico' + typing a note → persists { location: 'mexico', notes: 'hôtel Riu' }
+//   3. Note-only (no classification) then Close → persists { location: null, notes: … }
+//   4. With a seeded entry, clicking Clear + clearing textarea then Close → removes the entry
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
@@ -72,7 +72,7 @@ async function renderApp() {
     await Promise.resolve();
   });
   // Click the Calendar tab
-  const calBtn = screen.getByRole('button', { name: /calendrier/i });
+  const calBtn = screen.getByRole('button', { name: /calendar/i });
   await act(async () => { fireEvent.click(calBtn); });
   await act(async () => {
     await Promise.resolve();
@@ -123,17 +123,17 @@ describe('App DayPanel integration — handleDayPanelSave', () => {
     expect(entry._source).toBe('manual');
   });
 
-  it('2. clicking Mexique + typing note then Fermer persists { location: mexico, notes: hôtel Riu }', async () => {
+  it('2. clicking Mexico + typing note then Close persists { location: mexico, notes: hôtel Riu }', async () => {
     await renderApp();
     await act(async () => { clickDayCell(TEST_DAY); });
 
-    const mexiqueBtn = await screen.findByRole('button', { name: /Mexique/i });
+    const mexiqueBtn = await screen.findByRole('button', { name: /Mexico/i });
     await act(async () => { fireEvent.click(mexiqueBtn); });
 
     const textarea = screen.getByRole('textbox');
     await act(async () => { fireEvent.change(textarea, { target: { value: 'hôtel Riu' } }); });
 
-    const fermerBtn = screen.getByRole('button', { name: /Fermer/i });
+    const fermerBtn = screen.getByRole('button', { name: /Close/i });
     await act(async () => { fireEvent.click(fermerBtn); });
 
     const raw = _lsStore.get('ac-residence-data');
@@ -145,7 +145,7 @@ describe('App DayPanel integration — handleDayPanelSave', () => {
     expect(entry.notes).toBe('hôtel Riu');
   });
 
-  it('3. note-only (no classification) then Fermer persists { location: null, notes: … }', async () => {
+  it('3. note-only (no classification) then Close persists { location: null, notes: … }', async () => {
     await renderApp();
     await act(async () => { clickDayCell(TEST_DAY); });
 
@@ -154,7 +154,7 @@ describe('App DayPanel integration — handleDayPanelSave', () => {
     const textarea = screen.getByRole('textbox');
     await act(async () => { fireEvent.change(textarea, { target: { value: 'séjour Toronto' } }); });
 
-    const fermerBtn = screen.getByRole('button', { name: /Fermer/i });
+    const fermerBtn = screen.getByRole('button', { name: /Close/i });
     await act(async () => { fireEvent.click(fermerBtn); });
 
     const raw = _lsStore.get('ac-residence-data');
@@ -166,7 +166,7 @@ describe('App DayPanel integration — handleDayPanelSave', () => {
     expect(entry.notes).toBe('séjour Toronto');
   });
 
-  it('4. seeded entry: Effacer then clear textarea then Fermer removes the entry', async () => {
+  it('4. seeded entry: Clear then clear textarea then Close removes the entry', async () => {
     // Seed a pre-existing entry for TEST_DATE
     const seed = [{ date: TEST_DATE, location: 'canada', _source: 'manual', _lastModified: '2026-01-15T10:00:00.000Z', _deviceId: 'DEV-TEST' }];
     _lsStore.set('ac-residence-data', JSON.stringify(seed));
@@ -174,15 +174,15 @@ describe('App DayPanel integration — handleDayPanelSave', () => {
     await renderApp();
     await act(async () => { clickDayCell(TEST_DAY); });
 
-    // 'Effacer' button appears only when there is a non-null location
-    const effacerBtn = await screen.findByRole('button', { name: /^Effacer$/i });
+    // 'Clear' button appears only when there is a non-null location
+    const effacerBtn = await screen.findByRole('button', { name: /^Clear$/i });
     await act(async () => { fireEvent.click(effacerBtn); });
 
     // Clear the notes textarea too (it's empty by default for this seed, but be explicit)
     const textarea = screen.getByRole('textbox');
     await act(async () => { fireEvent.change(textarea, { target: { value: '' } }); });
 
-    const fermerBtn = screen.getByRole('button', { name: /Fermer/i });
+    const fermerBtn = screen.getByRole('button', { name: /Close/i });
     await act(async () => { fireEvent.click(fermerBtn); });
 
     const raw = _lsStore.get('ac-residence-data');

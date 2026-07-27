@@ -55,7 +55,7 @@ describe('ensureAccessToken', () => {
     await expect(ensureAccessToken()).resolves.toBeNull();
   });
 
-  it('throws "reconnexion requise" and deletes the refresh token on invalid_grant', async () => {
+  it('throws "reconnection required" and deletes the refresh token on invalid_grant', async () => {
     const invokeMock = vi.fn(async (cmd) => {
       if (cmd === 'load_refresh_token') return 'stored-token';
       return null; // delete_refresh_token + anything else
@@ -70,7 +70,7 @@ describe('ensureAccessToken', () => {
       json: async () => ({ error: 'invalid_grant' }),
     }));
     const { ensureAccessToken } = await import('../cloudAuth');
-    await expect(ensureAccessToken()).rejects.toThrow('reconnexion requise');
+    await expect(ensureAccessToken()).rejects.toThrow('reconnection required');
     expect(invokeMock).toHaveBeenCalledWith('delete_refresh_token');
   });
 });

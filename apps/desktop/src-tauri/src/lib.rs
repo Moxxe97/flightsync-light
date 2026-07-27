@@ -203,7 +203,7 @@ fn start_oauth_listener(app: tauri::AppHandle) -> Result<u16, String> {
             // instead of a blank 200 with no body.
             let html = "<!DOCTYPE html><html><body style='font-family:sans-serif;\
                 text-align:center;padding:60px;background:#0a0f1e;color:#e2e8f0'>\
-                <h2>\u{2713} Connect\u{00e9} \u{2014} retournez dans FlightSync Light.</h2>\
+                <h2>\u{2713} Signed in \u{2014} return to FlightSync Light.</h2>\
                 </body></html>";
             let resp = format!(
                 "HTTP/1.1 200 OK\r\n\
@@ -275,7 +275,7 @@ fn is_allowed_auth_url(auth_url: &str) -> bool {
 #[tauri::command]
 fn open_google_auth_window(app: tauri::AppHandle, auth_url: String) -> Result<(), String> {
     if !is_allowed_auth_url(&auth_url) {
-        return Err("auth_url refusée: seul https://accounts.google.com est autorisé".into());
+        return Err("auth_url rejected: only https://accounts.google.com is allowed".into());
     }
 
     // Close any leftover auth window

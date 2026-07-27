@@ -52,9 +52,9 @@ function hhmm(str) {
 // ─── Airport Helper ───────────────────────────────────────────
 const resolve = toIata;
 
-// Un OFP piégé peut produire des dizaines de milliers de "waypoints" fabriqués
-// dans la section FLIGHT LOG — bornes dures (audit M4). Un vrai journal de vol
-// compte ~50-150 fixes ; ces plafonds sont sans effet sur un OFP réel.
+// A booby-trapped OFP can produce tens of thousands of fabricated "waypoints"
+// in the FLIGHT LOG section — hard caps (audit M4). A real flight log has
+// ~50-150 fixes; these ceilings have no effect on a genuine OFP.
 const MAX_WAYPOINTS = 500;
 const MAX_LOG_CHARS = 300_000;
 
@@ -173,14 +173,14 @@ export function parseOfp(text) {
   let flightNums = [...new Set(fnRaw.map(m => m[1].padStart(4,'0')))];
 
   if (flightNums.length === 0) {
-    return { flights: [], error: 'Aucun numéro de vol AC trouvé dans ce document.' };
+    return { flights: [], error: 'No AC flight number found in this document.' };
   }
 
-  // Un PDF piégé peut produire des milliers de "vols" — borne dure (audit #25/G4).
+  // A booby-trapped PDF can produce thousands of "flights" — hard cap (audit #25/G4).
   const MAX_LEGS = 8;
   let warning;
   if (flightNums.length > MAX_LEGS) {
-    warning = `${flightNums.length} numéros de vol détectés — import limité aux ${MAX_LEGS} premiers.`;
+    warning = `${flightNums.length} flight numbers detected — import limited to the first ${MAX_LEGS}.`;
     flightNums = flightNums.slice(0, MAX_LEGS);
   }
 
@@ -266,8 +266,8 @@ export function parseOfp(text) {
       calcMethod += `, ${waypoints.distCorrected} dist-corrected`;
     }
     if (waypoints.truncated) {
-      calcMethod += ', tronqué';
-      const wpWarning = `Journal de vol anormalement long — waypoints limités aux ${MAX_WAYPOINTS} premiers.`;
+      calcMethod += ', truncated';
+      const wpWarning = `Abnormally long flight log — waypoints limited to the first ${MAX_WAYPOINTS}.`;
       warning = warning ? `${warning} ${wpWarning}` : wpWarning;
     }
   } else if (bothCanadian) {
@@ -302,7 +302,7 @@ export function parseOfp(text) {
     canadianTime,
     distance: gcDist,
     canadianDistance,
-    notes: `PDF OFP — ${canadianDistance}/${gcDist || '?'} nm (${gcDist > 0 ? ((canadianDistance/gcDist)*100).toFixed(1) : '?'}% canadien) [${calcMethod}]`,
+    notes: `PDF OFP — ${canadianDistance}/${gcDist || '?'} nm (${gcDist > 0 ? ((canadianDistance/gcDist)*100).toFixed(1) : '?'}% Canadian) [${calcMethod}]`,
     _confidence: conf,
   }));
 

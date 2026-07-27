@@ -6,13 +6,13 @@ export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpan
       {archiveYears.length === 0 ? (
         <div className="card" style={{ textAlign: "center", padding: 48 }}>
           <Icons.History />
-          <p style={{ marginTop: 14, fontSize: 14, color: "#94a3b8" }}>Aucune archive</p>
+          <p style={{ marginTop: 14, fontSize: 14, color: "#94a3b8" }}>No archives</p>
           <p style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>
-            Les vols des années passées apparaîtront ici automatiquement.
+            Flights from past years will appear here automatically.
           </p>
           {onRestoreFromDrive && (
             <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px', marginTop: 14 }} onClick={onRestoreFromDrive}>
-              ↓ Restaurer depuis Drive
+              ↓ Restore from Drive
             </button>
           )}
         </div>
@@ -21,12 +21,12 @@ export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpan
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             {onRestoreFromDrive && (
               <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={onRestoreFromDrive}>
-                ↓ Restaurer depuis Drive
+                ↓ Restore from Drive
               </button>
             )}
             {onBackupToDrive && (
               <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={onBackupToDrive}>
-                ☁︎ Sauvegarder sur Drive
+                ☁︎ Back up to Drive
               </button>
             )}
           </div>
@@ -50,7 +50,7 @@ export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpan
             >
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>{year}</span>
-                <span style={{ fontSize: 12, color: "#64748b" }}>{af.length} vol{af.length !== 1 ? "s" : ""}</span>
+                <span style={{ fontSize: 12, color: "#64748b" }}>{af.length} flight{af.length !== 1 ? "s" : ""}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {onOpenYear && (
@@ -60,7 +60,7 @@ export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpan
                     onClick={(e) => { e.stopPropagation(); onOpenYear(year); }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenYear(year); } }}
                     style={{ fontSize: 12, color: "#63b3ed", border: "1px solid #1e3a5f", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}
-                  >Ouvrir l'année →</span>
+                  >Open year →</span>
                 )}
                 <span style={{ color: "#475569", fontSize: 16, transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>▶</span>
               </div>
@@ -70,10 +70,10 @@ export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpan
               <div style={{ borderTop: "1px solid #1e2a45", padding: "20px" }}>
                 <div className="row-stack" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
                   {[
-                    { label: "VOLS", value: af.length, color: "#63b3ed" },
-                    { label: "TEMPS CA %", value: `${canadianPct}%`, color: "#f59e0b" },
-                    { label: "JOURS CA", value: daysCanada, color: "#ef4444" },
-                    { label: "HORS CA", value: daysOutside, color: "#a78bfa" },
+                    { label: "FLIGHTS", value: af.length, color: "#63b3ed" },
+                    { label: "CA TIME %", value: `${canadianPct}%`, color: "#f59e0b" },
+                    { label: "CA DAYS", value: daysCanada, color: "#ef4444" },
+                    { label: "OUTSIDE CA", value: daysOutside, color: "#a78bfa" },
                   ].map(chip => (
                     <div key={chip.label} style={{ background: "#0a0f1e", borderRadius: 8, padding: "12px 10px", textAlign: "center" }}>
                       <div style={{ fontSize: 20, fontWeight: 700, color: chip.color }}>{chip.value}</div>
@@ -83,13 +83,13 @@ export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpan
                 </div>
 
                 {af.length === 0 ? (
-                  <p style={{ fontSize: 12, color: "#475569", textAlign: "center", padding: 16 }}>Aucun vol archivé pour {year}.</p>
+                  <p style={{ fontSize: 12, color: "#475569", textAlign: "center", padding: 16 }}>No archived flights for {year}.</p>
                 ) : (
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ borderBottom: "1px solid #1e2a45" }}>
-                          {["Date", "Vol", "Route", "Total", "Canada", "%"].map(h => (
+                          {["Date", "Flight", "Route", "Total", "Canada", "%"].map(h => (
                             <th key={h} className="mono" style={{ padding: "8px 12px", fontSize: 10, color: "#475569", textAlign: "left", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
                           ))}
                         </tr>

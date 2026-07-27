@@ -121,7 +121,7 @@ async function renderApp() {
 }
 
 // Import a JSON backup through the real hidden file input → preview modal →
-// "Remplacer tout" to trigger a real setFlights (which is what the scheduler watches).
+// "Replace all" to trigger a real setFlights (which is what the scheduler watches).
 async function importBackup(text) {
   const input = document.querySelector('input[type="file"]');
   expect(input).not.toBeNull();
@@ -132,7 +132,7 @@ async function importBackup(text) {
     await Promise.resolve();
     await Promise.resolve();
   });
-  const replaceBtn = await screen.findByText('Remplacer tout');
+  const replaceBtn = await screen.findByText('Replace all');
   await act(async () => {
     fireEvent.click(replaceBtn);
     await Promise.resolve();
@@ -225,8 +225,8 @@ describe('App restore from folder', () => {
     const backupTabBtn = screen.getByRole('button', { name: /Backup|Sauvegardes/i });
     await act(async () => { fireEvent.click(backupTabBtn); });
 
-    // Click "Restaurer depuis le dossier".
-    const restoreBtn = await screen.findByRole('button', { name: /Restaurer depuis le dossier/i });
+    // Click "Restore from folder".
+    const restoreBtn = await screen.findByRole('button', { name: /Restore from folder/i });
     await act(async () => {
       fireEvent.click(restoreBtn);
       await Promise.resolve();
@@ -234,9 +234,9 @@ describe('App restore from folder', () => {
     });
 
     // The import-preview modal should appear.
-    await screen.findByText('Aperçu de l\'Import');
+    await screen.findByText('Import Preview');
 
-    // Check that the flight count and residence count appear (1 vol, 0 résidence).
+    // Check that the flight count and residence count appear (1 flight, 0 residence).
     const counts = screen.getAllByText(/\d+/);
     const flightCount = counts.find((el) => el.textContent === '1');
     expect(flightCount).toBeTruthy();
@@ -286,7 +286,7 @@ describe('App choose backup folder', () => {
     const backupTabBtn = screen.getByRole('button', { name: /Backup|Sauvegardes/i });
     await act(async () => { fireEvent.click(backupTabBtn); });
 
-    const pickBtn = await screen.findByRole('button', { name: /Choisir un dossier/i });
+    const pickBtn = await screen.findByRole('button', { name: /Choose a folder/i });
     await act(async () => {
       fireEvent.click(pickBtn);
       await Promise.resolve();
@@ -294,19 +294,19 @@ describe('App choose backup folder', () => {
     });
 
     expect(ensureFolderAccessMock).toHaveBeenCalledWith('/Users/x/NewFolder');
-    await screen.findByText('Dossier de sauvegarde configuré');
+    await screen.findByText('Backup folder configured');
     expect(JSON.parse(window.localStorage.getItem('ac-sync-settings')).backupFolder).toBe('/Users/x/NewFolder');
   });
 
   it('grant failure surfaces an error and does not persist the folder', async () => {
-    ensureFolderAccessMock.mockRejectedValueOnce(new Error('Permission refusée'));
+    ensureFolderAccessMock.mockRejectedValueOnce(new Error('Permission denied'));
 
     await renderApp();
 
     const backupTabBtn = screen.getByRole('button', { name: /Backup|Sauvegardes/i });
     await act(async () => { fireEvent.click(backupTabBtn); });
 
-    const pickBtn = await screen.findByRole('button', { name: /Choisir un dossier/i });
+    const pickBtn = await screen.findByRole('button', { name: /Choose a folder/i });
     await act(async () => {
       fireEvent.click(pickBtn);
       await Promise.resolve();
@@ -314,12 +314,12 @@ describe('App choose backup folder', () => {
     });
 
     expect(ensureFolderAccessMock).toHaveBeenCalledWith('/Users/x/NewFolder');
-    await screen.findByText("Impossible d'autoriser l'accès au dossier : Permission refusée");
+    await screen.findByText("Could not grant access to the folder: Permission denied");
 
     // The folder must NOT have been saved: no backupFolder in settings, and
     // the picker button ("no folder configured" state) is still shown.
     const storedSettings = window.localStorage.getItem('ac-sync-settings');
     expect(storedSettings ? JSON.parse(storedSettings).backupFolder : undefined).toBeFalsy();
-    expect(screen.getByRole('button', { name: /Choisir un dossier/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Choose a folder/i })).toBeTruthy();
   });
 });

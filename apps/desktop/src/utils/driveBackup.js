@@ -30,7 +30,7 @@ export const MAX_BLOB_BYTES = 20 * 1024 * 1024;
 
 async function requireToken() {
   const token = await ensureAccessToken();
-  if (!token) throw new Error('Non authentifié Google');
+  if (!token) throw new Error('Not signed in to Google');
   return token;
 }
 
@@ -188,7 +188,7 @@ export async function findBackup() {
 function tooLargeError(bytes) {
   const mb = (bytes / (1024 * 1024)).toFixed(1);
   const capMb = MAX_BACKUP_BYTES / (1024 * 1024);
-  return new Error(`Sauvegarde trop volumineuse (${mb} Mo, max ${capMb} Mo)`);
+  return new Error(`Backup too large (${mb} MB, max ${capMb} MB)`);
 }
 
 export async function downloadBackup(fileId) {
