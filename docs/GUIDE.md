@@ -57,7 +57,34 @@ Drop your **OFP PDFs** into the drop zone. The app extracts the flight, computes
 
 ---
 
-## 4. Backup — strongly recommended
+## 4. How the time over Canada is computed
+
+The Canadian proportion on the Dashboard is **time-based** (Canadian hours ÷ total hours), consistent with the CRA approach. Since an OFP has no minute-by-minute position log, time over Canada is derived from **distance** over Canada: the app measures what fraction of the flown route lies over Canadian territory, and applies that fraction to the block time.
+
+"Over Canada" means **sovereign Canadian territory only** — the landmass plus the 12-nautical-mile territorial waters, drawn along the real coastline. Oceanic airspace controlled by Canada (e.g. Gander Oceanic) does **not** count.
+
+### From an OFP (most precise)
+
+1. The app reads the **actual waypoints** of the planned route from the OFP's flight log (typically 50–150 fixes).
+2. Every leg between consecutive waypoints is walked in **~20 nm steps** along the great circle, and each step is tested against the Canada boundary. So a leg that clips the US border, or re-enters Canada over the Maritimes, is measured correctly — not scored all-or-nothing.
+3. Canadian distance = the sum of the steps that fall over Canada. Then:
+   **Canadian time = block time × (Canadian distance ÷ total route distance)**
+
+This is the number you see per flight in the Data tab, and the **↻ Recompute (OFP)** button re-runs exactly this calculation on every stored OFP (useful after a boundary improvement).
+
+### From a monthly flight summary (estimate)
+
+A summary PDF lists flights but no route, so the app has to estimate the Canadian share of each missing flight. In the reconciliation window, the badge next to each flight tells you which estimate was used:
+
+- **route average** — you already have OFP-scored flights on the same city pair; the app reuses your own history's average distance and Canadian distance for that route. This is usually very close to an OFP result.
+- **great circle** — no history for that route; the app samples the direct great-circle path between the two airports (same 20 nm stepping as above). Good for typical routes, less exact if the real routing deviates a lot from the direct track.
+- **manual** — you typed the distances yourself.
+
+In both cases the flight's block time comes from the summary, and Canadian time is again block time × Canadian fraction. Deadhead legs are not counted in the tax figures. If you later drop the real OFP for one of these flights, the estimate is replaced by the precise calculation.
+
+---
+
+## 5. Backup — strongly recommended
 
 Your data lives only on your Mac: set up at least one backup from day one (**Backup & Restore** tab).
 
@@ -71,7 +98,7 @@ Both options can be active at the same time. To restore: **"Restore from folder"
 
 ---
 
-## 5. Privacy, in short
+## 6. Privacy, in short
 
 - No server, no telemetry, no sign-up. The app is 100% functional without a Google account.
 - Data is stored in `~/Library/WebKit/com.flightsynclight.app/` — **never delete this folder**, it is your logbook.
@@ -79,7 +106,7 @@ Both options can be active at the same time. To restore: **"Restore from folder"
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Symptom | Fix |
 |---|---|

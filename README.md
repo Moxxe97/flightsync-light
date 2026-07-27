@@ -15,6 +15,8 @@ A macOS logbook for airline pilots — free, local-first, open source.
 
 All data is stored **locally on your Mac** (localStorage + IndexedDB). No server, no telemetry, no sign-up required.
 
+**New here? Start with the [Quick Guide](https://moxxe97.github.io/flightsync-light/GUIDE)** — install steps, a tour of the tabs, and how the time over Canada is computed.
+
 ---
 
 ## Free & private
