@@ -3,6 +3,8 @@ import './App.css';
 import { exportICS } from './utils/icsExport';
 import { runBackup, findBackup, downloadBackup, restoreBlobs, persistRestoreData, BACKUP_FILENAME } from './utils/driveBackup';
 import { runFolderBackup, restoreFolderBlobs, ensureFolderAccess } from './utils/folderBackup';
+import { isMobilePlatform } from './utils/platform';
+import { mobileBackupRoot } from './utils/mobileBackupRoot';
 import { tallyResidence } from './utils/residence';
 import { selectDisplayData, archiveYearList, adjacentYear } from './utils/archiveView';
 import { getAllBoardingPassDates } from '@flightsync/core/idb';
@@ -105,6 +107,16 @@ export default function FlightSyncSystem() {
     backupFolder: '', // local folder destination for folder auto-backup
   });
   const [isLoading, setIsLoading] = useState(true);
+  // Distinct from `isMobile` above (viewport width) — this is the Tauri
+  // platform (Android/iOS vs desktop), computed once at mount since it can't
+  // change at runtime. Drives platform-aware local-backup copy in BackupTab.
+  const [isMobilePlatformDevice, setIsMobilePlatformDevice] = useState(false);
+  useEffect(() => {
+    // Falls back to `false` (desktop copy) outside a real Tauri webview —
+    // e.g. tests/jsdom, where window.__TAURI_INTERNALS__ is undefined and
+    // the underlying invoke() throws instead of rejecting cleanly.
+    isMobilePlatform().then(setIsMobilePlatformDevice).catch(() => setIsMobilePlatformDevice(false));
+  }, []);
   const backupTimerRef = useRef(null);
   const backupStatusResetRef = useRef(null);
   const folderBackupTimerRef = useRef(null);
@@ -569,6 +581,23 @@ export default function FlightSyncSystem() {
 
   // ─── FOLDER PICKER ───────────────────────────────────
   const chooseBackupFolder = async () => {
+    // Mobile (Android + iOS): the Tauri dialog plugin's folder picker isn't
+    // implemented on mobile (verified on-device — it rejects with "Folder
+    // picker is not implemented on mobile"). Local backup instead targets a
+    // fixed subfolder of the app's Documents dir; no picker UI needed.
+    if (await isMobilePlatform()) {
+      try {
+        const folder = await mobileBackupRoot();
+        await ensureFolderAccess(folder);
+        const newSettings = { ...settings, backupFolder: folder };
+        setSettings(newSettings);
+        await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+        notify('Local backup enabled (app Documents folder)', 'success');
+      } catch (err) {
+        notify(`Could not enable local backup: ${err.message}`, 'error');
+      }
+      return;
+    }
     const invoke = window.__TAURI_INTERNALS__?.invoke;
     if (!invoke) return;
     const folder = await invoke('plugin:dialog|open', {
@@ -1092,6 +1121,7 @@ export default function FlightSyncSystem() {
           disableFolderBackup={disableFolderBackup}
           runFolderBackupNow={runFolderBackupNow}
           restoreFromFolder={restoreFromFolder}
+          isMobile={isMobilePlatformDevice}
         />
       )}
 

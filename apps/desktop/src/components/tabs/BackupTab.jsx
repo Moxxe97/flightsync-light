@@ -21,6 +21,7 @@ export default function BackupTab({
   disableFolderBackup,
   runFolderBackupNow,
   restoreFromFolder,
+  isMobile,
 }) {
   const signedIn = !!authUser;
   const status = backupState?.status;
@@ -131,8 +132,9 @@ export default function BackupTab({
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600, color: "#f1f5f9", margin: 0 }}>Local Folder</h3>
             <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
-              Automatic backup to a folder on your Mac — put it in
-              iCloud Drive or Dropbox for an off-device copy, no Google account needed.
+              {isMobile
+                ? "Automatic backup into this app's Documents folder — on iPhone it appears in the Files app under FlightSync Light."
+                : "Automatic backup to a folder on your Mac — put it in iCloud Drive or Dropbox for an off-device copy, no Google account needed."}
             </p>
           </div>
         </div>
@@ -149,12 +151,16 @@ export default function BackupTab({
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn btn-primary" onClick={runFolderBackupNow}>Back up now</button>
               <button className="btn btn-secondary" onClick={restoreFromFolder}>Restore from folder</button>
-              <button className="btn btn-secondary" onClick={chooseBackupFolder}>Change folder</button>
+              {!isMobile && (
+                <button className="btn btn-secondary" onClick={chooseBackupFolder}>Change folder</button>
+              )}
               <button className="btn btn-secondary" onClick={disableFolderBackup}>Turn off</button>
             </div>
           </>
         ) : (
-          <button className="btn btn-primary" onClick={chooseBackupFolder}>Choose a folder…</button>
+          <button className="btn btn-primary" onClick={chooseBackupFolder}>
+            {isMobile ? "Enable local backup" : "Choose a folder…"}
+          </button>
         )}
       </div>
 
