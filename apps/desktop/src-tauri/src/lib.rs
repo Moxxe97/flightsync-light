@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 #[cfg(desktop)]
 use std::time::{Duration, Instant};
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
@@ -353,25 +353,64 @@ fn delete_refresh_token() -> Result<(), String> {
     }
 }
 
-// Android has no keyring backend; real Keystore-backed storage lands with the
-// KeystorePlugin (see android_keystore module). Stubs keep the build green
-// until then.
+// Android has no keyring backend; refresh tokens are stored via the
+// KeystorePlugin, a small Kotlin plugin backed by the Android Keystore
+// (AES256 master key, EncryptedSharedPreferences) — see the
+// android_keystore module below and gen/android/.../KeystorePlugin.kt.
 #[cfg(target_os = "android")]
-#[tauri::command]
-fn save_refresh_token(_token: String) -> Result<(), String> {
-    Err("android keystore not wired yet".into())
+mod android_keystore {
+    use serde::Deserialize;
+    use tauri::{
+        plugin::{Builder, PluginHandle, TauriPlugin},
+        Manager, Runtime,
+    };
+
+    #[derive(Deserialize)]
+    pub struct LoadResponse {
+        pub token: Option<String>,
+    }
+
+    pub struct Keystore<R: Runtime>(pub PluginHandle<R>);
+
+    pub fn init<R: Runtime>() -> TauriPlugin<R> {
+        Builder::new("fslkeystore")
+            .setup(|app, api| {
+                let handle = api.register_android_plugin("com.flightsynclight.app", "KeystorePlugin")?;
+                app.manage(Keystore(handle));
+                Ok(())
+            })
+            .build()
+    }
 }
 
 #[cfg(target_os = "android")]
 #[tauri::command]
-fn load_refresh_token() -> Result<Option<String>, String> {
-    Ok(None)
+fn save_refresh_token(app: tauri::AppHandle, token: String) -> Result<(), String> {
+    app.state::<android_keystore::Keystore<tauri::Wry>>()
+        .0
+        .run_mobile_plugin::<serde_json::Value>("save", serde_json::json!({ "token": token }))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "android")]
 #[tauri::command]
-fn delete_refresh_token() -> Result<(), String> {
-    Ok(())
+fn load_refresh_token(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    app.state::<android_keystore::Keystore<tauri::Wry>>()
+        .0
+        .run_mobile_plugin::<android_keystore::LoadResponse>("load", serde_json::json!({}))
+        .map(|r| r.token)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn delete_refresh_token(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<android_keystore::Keystore<tauri::Wry>>()
+        .0
+        .run_mobile_plugin::<serde_json::Value>("delete", serde_json::json!({}))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Lets JS branch its OAuth flow without pulling in the os plugin.
@@ -411,6 +450,9 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init());
+
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(android_keystore::init());
 
     #[cfg(desktop)]
     let builder = builder.invoke_handler(tauri::generate_handler![
