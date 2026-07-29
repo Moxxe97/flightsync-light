@@ -232,7 +232,10 @@ async function signInMobile() {
       else if (payload.state !== state) reject(new Error('Unexpected OAuth response (invalid state) — ignored'));
       else if (payload.code) resolve(payload.code);
       else reject(new Error('OAuth callback missing code'));
-    }).then((fn) => { unlisten = fn; }, reject);
+    }).then(
+      (fn) => { unlisten = fn; },
+      (err) => { clearTimeout(timeout); reject(err); },
+    );
   });
 
   // System browser, never an embedded webview — Google rejects webview OAuth.
