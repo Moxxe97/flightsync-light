@@ -15,3 +15,9 @@
 // sign-in disabled.
 export const GOOGLE_CLIENT_ID = '';
 export const GOOGLE_CLIENT_SECRET = '';
+
+// Mobile OAuth clients (Android / iOS types). These client types have NO
+// secret — PKCE only. Values are public identifiers, kept here only to follow
+// the config.js pattern. Empty = mobile sign-in disabled.
+export const GOOGLE_ANDROID_CLIENT_ID = '';
+export const GOOGLE_IOS_CLIENT_ID = '';

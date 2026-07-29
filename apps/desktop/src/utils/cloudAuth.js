@@ -68,6 +68,38 @@ export function buildAuthUrl(port, challenge, state) {
   return `${AUTH_URL}?${params.toString()}`;
 }
 
+// '12345-abc.apps.googleusercontent.com' → 'com.googleusercontent.apps.12345-abc'
+export function reversedClientScheme(clientId) {
+  return `com.googleusercontent.apps.${String(clientId).replace(/\.apps\.googleusercontent\.com$/, '')}`;
+}
+
+export function buildMobileAuthUrl(clientId, challenge, state) {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: `${reversedClientScheme(clientId)}:/oauth2redirect`,
+    response_type: 'code',
+    scope: SCOPES,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state,
+    // Installed-app clients always get a refresh token, but prompt=consent
+    // keeps the guarantee explicit (mirrors the desktop flow).
+    prompt: 'consent',
+  });
+  return `${AUTH_URL}?${params.toString()}`;
+}
+
+// Deep-link redirect → {code, state, error}. Never throws.
+export function parseOAuthRedirect(url) {
+  try {
+    const q = String(url ?? '').split('?')[1] || '';
+    const p = new URLSearchParams(q);
+    return { code: p.get('code'), state: p.get('state'), error: p.get('error') };
+  } catch {
+    return { code: null, state: null, error: null };
+  }
+}
+
 function requireConfig() {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     throw new Error('Configuration Google manquante (config.js)');
