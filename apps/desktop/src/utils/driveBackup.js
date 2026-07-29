@@ -99,7 +99,7 @@ async function listFiles(token, parentId) {
 
 export function buildBackupPayload({ flights, residence, settings }) {
   // backupFolder is a machine-specific absolute path (contains the macOS
-  // username) — never serialize it into a backup that may leave this Mac.
+  // username) — never serialize it into a backup that may leave this device.
   const { backupFolder: _machineLocal, ...safeSettings } = settings || {};
   return {
     schemaVersion: 1,

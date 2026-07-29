@@ -19,6 +19,8 @@
   z-index: 1000;
   max-width: min(360px, calc(100vw - 40px));
   word-break: break-word;
+  padding: 14px 24px;
+  border-radius: 12px;
 }
 
 @media (max-width: 767px) {
@@ -28,6 +30,7 @@
     left: calc(12px + env(safe-area-inset-left));
     max-width: none;
     width: auto;
+    padding: 12px 16px;
   }
 }
 
