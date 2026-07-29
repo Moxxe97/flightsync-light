@@ -1,6 +1,10 @@
+#[cfg(desktop)]
 use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(desktop)]
 use std::net::{Shutdown, TcpListener, TcpStream};
+#[cfg(desktop)]
 use std::time::{Duration, Instant};
+#[cfg(desktop)]
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
@@ -21,21 +25,25 @@ use tauri_plugin_fs::FsExt;
 // Fixed port — must match an entry in the OAuth client's
 // "Authorized redirect URIs". Google's Web client type doesn't
 // allow arbitrary ports, only exact URI matches.
+#[cfg(desktop)]
 const OAUTH_PORT: u16 = 8765;
 
 // Give up waiting for a connection after this long. Matches the JS-side 5-minute
 // OAuth timeout so a cancelled sign-in (the redirect never arrives) doesn't leave
 // the accept() blocked forever holding port 8765 — which would make the next
 // sign-in attempt fail to bind until the app is restarted.
+#[cfg(desktop)]
 const ACCEPT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 // Cap how much of an incoming request we read. Our HTTP request line is well
 // under this; the bound stops a local process from streaming unbounded data
 // into memory (audit R2).
+#[cfg(desktop)]
 const MAX_REQUEST_BYTES: u64 = 8 * 1024;
 
 // Per-connection read timeout so one silent connection can't wedge the listener
 // thread (and hold port 8765) until the app restarts (audit R3).
+#[cfg(desktop)]
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Code (or error) extracted from the loopback redirect query string.
