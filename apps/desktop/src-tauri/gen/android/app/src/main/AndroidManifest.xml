@@ -42,7 +42,7 @@
                 <action android:name="org.chromium.arc.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="com.googleusercontent.apps.IOS_CLIENT_NUMBER" />
+                <data android:scheme="com.googleusercontent.apps.931865050674-htei8hrqpcve9c142cbk4m3j9tg17q5r" />
                 
                 
                 

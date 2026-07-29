@@ -172,7 +172,7 @@ export default function BackupTab({
           </div>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600, color: "#f1f5f9" }}>Local File (JSON)</h3>
-            <p style={{ fontSize: 12, color: "#64748b" }}>Manual file export / import on this Mac</p>
+            <p style={{ fontSize: 12, color: "#64748b" }}>Manual file export / import on this device</p>
           </div>
         </div>
 
