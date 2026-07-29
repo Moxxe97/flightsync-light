@@ -42,3 +42,9 @@ docs/superpowers/
 apps/desktop/src-tauri/gen/android/keystore.properties
 *.jks
 *.keystore
+
+# iOS signing/build artifacts — never in the public repo
+apps/desktop/src-tauri/gen/apple/build/
+*.mobileprovision
+*.p12
+ExportOptions.plist
