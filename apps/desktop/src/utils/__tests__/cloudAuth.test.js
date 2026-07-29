@@ -46,10 +46,14 @@ describe('ensureAccessToken', () => {
 
   it('returns null when no refresh token is stored (signed out)', async () => {
     // vi.doMock is not hoisted — safe to call inside a test body.
-    vi.doMock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => null) }));
+    vi.doMock('@tauri-apps/api/core', () => ({
+      invoke: vi.fn(async (cmd) => (cmd === 'platform_name' ? 'desktop' : null)),
+    }));
     vi.doMock('../../config', () => ({
       GOOGLE_CLIENT_ID: 'test-client-id',
       GOOGLE_CLIENT_SECRET: 'test-client-secret',
+      GOOGLE_ANDROID_CLIENT_ID: '',
+      GOOGLE_IOS_CLIENT_ID: '',
     }));
     const { ensureAccessToken } = await import('../cloudAuth');
     await expect(ensureAccessToken()).resolves.toBeNull();
@@ -58,12 +62,15 @@ describe('ensureAccessToken', () => {
   it('throws "reconnection required" and deletes the refresh token on invalid_grant', async () => {
     const invokeMock = vi.fn(async (cmd) => {
       if (cmd === 'load_refresh_token') return 'stored-token';
+      if (cmd === 'platform_name') return 'desktop';
       return null; // delete_refresh_token + anything else
     });
     vi.doMock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
     vi.doMock('../../config', () => ({
       GOOGLE_CLIENT_ID: 'test-client-id',
       GOOGLE_CLIENT_SECRET: 'test-client-secret',
+      GOOGLE_ANDROID_CLIENT_ID: '',
+      GOOGLE_IOS_CLIENT_ID: '',
     }));
     global.fetch = vi.fn(async () => ({
       ok: false,

@@ -52,5 +52,13 @@
         "applicationFolderPosition": { "x": 500, "y": 185 }
       }
     }
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        { "scheme": ["com.googleusercontent.apps.ANDROID_CLIENT_NUMBER"], "appLink": false },
+        { "scheme": ["com.googleusercontent.apps.IOS_CLIENT_NUMBER"], "appLink": false }
+      ]
+    }
   }
 }

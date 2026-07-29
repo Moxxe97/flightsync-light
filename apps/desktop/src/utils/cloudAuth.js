@@ -4,7 +4,8 @@
 // in memory. Profile (email/name/sub) persists in localStorage so the UI
 // knows who is signed in across launches without a network call.
 import { invoke } from '@tauri-apps/api/core';
-import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '../config';
+import { getPlatform } from './platform';
+import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } from '../config';
 
 const SCOPES = [
   'openid',
@@ -106,6 +107,22 @@ function requireConfig() {
   }
 }
 
+// The refresh token stored on a device was always minted by that device's own
+// client, so refresh/exchange must use the matching client credentials.
+// Desktop-app clients carry a (non-confidential) secret; mobile clients have none.
+async function clientParams() {
+  const p = await getPlatform();
+  if (p === 'android') return { client_id: GOOGLE_ANDROID_CLIENT_ID };
+  if (p === 'ios') return { client_id: GOOGLE_IOS_CLIENT_ID };
+  return { client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET };
+}
+
+async function requireConfigForPlatform() {
+  const params = await clientParams();
+  if (!params.client_id) throw new Error('Missing Google client configuration (config.js)');
+  return params;
+}
+
 async function tokenRequest(bodyParams) {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
@@ -148,7 +165,7 @@ export function onAuthChanged(callback) {
   return () => _listeners.delete(callback);
 }
 
-export async function signInWithGoogle() {
+async function signInDesktop() {
   requireConfig();
   const port = await invoke('start_oauth_listener');
   const verifier = randomUrlSafe(64);
@@ -191,6 +208,58 @@ export async function signInWithGoogle() {
   return profile;
 }
 
+async function signInMobile() {
+  const { client_id } = await requireConfigForPlatform();
+  const verifier = randomUrlSafe(64);
+  const challenge = await pkceChallenge(verifier);
+  const state = randomUrlSafe(32);
+  const redirectUri = `${reversedClientScheme(client_id)}:/oauth2redirect`;
+
+  const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+  const { openUrl } = await import('@tauri-apps/plugin-opener');
+
+  const codePromise = new Promise((resolve, reject) => {
+    let unlisten = null;
+    const timeout = setTimeout(() => {
+      unlisten?.();
+      reject(new Error('Google sign-in timed out (5 min)'));
+    }, 5 * 60 * 1000);
+    onOpenUrl((urls) => {
+      const payload = parseOAuthRedirect(urls?.[0]);
+      clearTimeout(timeout);
+      unlisten?.();
+      if (payload.error) reject(new Error(payload.error));
+      else if (payload.state !== state) reject(new Error('Unexpected OAuth response (invalid state) — ignored'));
+      else if (payload.code) resolve(payload.code);
+      else reject(new Error('OAuth callback missing code'));
+    }).then((fn) => { unlisten = fn; }, reject);
+  });
+
+  // System browser, never an embedded webview — Google rejects webview OAuth.
+  await openUrl(buildMobileAuthUrl(client_id, challenge, state));
+  const code = await codePromise;
+
+  const data = await tokenRequest({
+    code,
+    client_id,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+    code_verifier: verifier,
+  });
+  cacheAccessToken(data);
+  if (data.refresh_token) await invoke('save_refresh_token', { token: data.refresh_token });
+
+  const claims = decodeJwtClaims(data.id_token) || {};
+  const profile = { uid: claims.sub || '', email: claims.email || '', name: claims.name || '' };
+  setProfile(profile);
+  return profile;
+}
+
+export async function signInWithGoogle() {
+  const p = await getPlatform();
+  return p === 'desktop' ? signInDesktop() : signInMobile();
+}
+
 // Returns a valid access token, silently refreshing via the Keychain refresh
 // token. Returns null when signed out. Throws 'reconnection required' when the
 // refresh token was revoked (the UI shows the sign-in button again).
@@ -198,13 +267,12 @@ export async function ensureAccessToken() {
   if (_accessToken && Date.now() < _accessTokenExpiresAt) return _accessToken;
   const refreshToken = await invoke('load_refresh_token');
   if (!refreshToken) return null;
-  requireConfig();
+  const params = await requireConfigForPlatform();
   try {
     const data = await tokenRequest({
       refresh_token: refreshToken,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
       grant_type: 'refresh_token',
+      ...params,
     });
     cacheAccessToken(data);
     return _accessToken;
