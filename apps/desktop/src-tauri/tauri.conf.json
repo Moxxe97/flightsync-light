@@ -57,7 +57,7 @@
     "deep-link": {
       "mobile": [
         { "scheme": ["com.googleusercontent.apps.931865050674-bm1m3hl17ck1kpgp3vm2o3tnrvnv4s9u"], "appLink": false },
-        { "scheme": ["com.googleusercontent.apps.IOS_CLIENT_NUMBER"], "appLink": false }
+        { "scheme": ["com.googleusercontent.apps.931865050674-htei8hrqpcve9c142cbk4m3j9tg17q5r"], "appLink": false }
       ]
     }
   }
