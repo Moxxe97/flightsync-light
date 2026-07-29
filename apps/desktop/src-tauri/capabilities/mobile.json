@@ -8,7 +8,10 @@
     "core:default",
     "core:event:default",
     "deep-link:default",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://accounts.google.com/*" }]
+    },
     "dialog:allow-open",
     "dialog:allow-save",
     "fs:allow-read-file",
