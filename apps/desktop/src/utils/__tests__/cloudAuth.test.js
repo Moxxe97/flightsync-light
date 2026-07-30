@@ -72,7 +72,7 @@ describe('ensureAccessToken', () => {
       GOOGLE_ANDROID_CLIENT_ID: '',
       GOOGLE_IOS_CLIENT_ID: '',
     }));
-    global.fetch = vi.fn(async () => ({
+    globalThis.fetch = vi.fn(async () => ({
       ok: false,
       json: async () => ({ error: 'invalid_grant' }),
     }));
