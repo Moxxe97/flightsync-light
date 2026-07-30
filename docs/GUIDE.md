@@ -25,7 +25,31 @@ A macOS logbook for airline pilots — free, no account required, all your data 
 
 ---
 
-## 2. Tour of the app — the 6 tabs
+## 2. Install on your phone
+
+FlightSync Light also runs on iPhone and Android, with the same local-first data model as the Mac app.
+
+### iPhone (TestFlight)
+
+1. Install **TestFlight** from the App Store (free, published by Apple).
+2. Open this link on your iPhone: **[testflight.apple.com/join/4fgXCmZT](https://testflight.apple.com/join/4fgXCmZT)**
+3. Tap **Install**.
+
+Updates arrive **automatically** through TestFlight — nothing to do on your end. Apple requires TestFlight builds to be refreshed at least every 90 days, so a new build always lands well before the old one would expire.
+
+### Android (APK)
+
+1. On your phone, open the repository's **[Releases](https://github.com/Moxxe97/flightsync-light/releases)** tab and download the latest `.apk`.
+2. Open the downloaded file. Android will prompt to allow "install unknown apps" for your browser — allow it, then continue the install.
+3. **To update**: download the new `.apk` from the latest release and open it the same way — it installs over the old version and keeps your data.
+
+### Moving data between devices
+
+Each device — Mac, iPhone, Android — keeps its own local data; there's no live sync between them. To move your data to another device, back up (Drive or local folder) on the one you're leaving, then restore on the new one from **Backup & Restore**. Rule of thumb: one primary device at a time, and back up before switching.
+
+---
+
+## 3. Tour of the app — the 6 tabs
 
 | Tab | What it's for |
 |---|---|
@@ -38,7 +62,7 @@ A macOS logbook for airline pilots — free, no account required, all your data 
 
 ---
 
-## 3. Day-to-day use
+## 4. Day-to-day use
 
 ### Classify your days (Calendar)
 
@@ -57,7 +81,7 @@ Drop your **OFP PDFs** into the drop zone. The app extracts the flight, computes
 
 ---
 
-## 4. How the time over Canada is computed
+## 5. How the time over Canada is computed
 
 The Canadian proportion on the Dashboard is **time-based** (Canadian hours ÷ total hours), consistent with the CRA approach. Since an OFP has no minute-by-minute position log, time over Canada is derived from **distance** over Canada: the app measures what fraction of the flown route lies over Canadian territory, and applies that fraction to the block time.
 
@@ -84,7 +108,7 @@ In both cases the flight's block time comes from the summary, and Canadian time 
 
 ---
 
-## 5. Backup — strongly recommended
+## 6. Backup — strongly recommended
 
 Your data lives only on your Mac: set up at least one backup from day one (**Backup & Restore** tab).
 
@@ -98,7 +122,7 @@ Both options can be active at the same time. To restore: **"Restore from folder"
 
 ---
 
-## 6. Privacy, in short
+## 7. Privacy, in short
 
 - No server, no telemetry, no sign-up. The app is 100% functional without a Google account.
 - Data is stored in `~/Library/WebKit/com.flightsynclight.app/` — **never delete this folder**, it is your logbook.
@@ -106,7 +130,7 @@ Both options can be active at the same time. To restore: **"Restore from folder"
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Fix |
 |---|---|

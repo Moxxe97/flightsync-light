@@ -54,6 +54,10 @@ This is only needed once **per Mac**. macOS remembers your choice.
 
 > **Why unsigned?** Apple signing costs USD 99/year and requires enrolling in the developer program. For a free, open-source tool distributed directly, that overhead isn't justified. The source code is available here for audit.
 
+### On your phone
+
+FlightSync Light also runs on iPhone and Android — see **[Install on your phone](https://moxxe97.github.io/flightsync-light/GUIDE#install-on-your-phone)** in the Quick Guide for the TestFlight link and APK install steps.
+
 ---
 
 ## Google sign-in (optional)
