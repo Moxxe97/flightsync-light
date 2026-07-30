@@ -48,3 +48,4 @@ apps/desktop/src-tauri/gen/apple/build/
 *.mobileprovision
 *.p12
 ExportOptions.plist
+AuthKey_*.p8
