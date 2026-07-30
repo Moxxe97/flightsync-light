@@ -95,3 +95,31 @@ describe('BackupTab — error state', () => {
     expect(screen.queryByRole('button', { name: /Reconnection required/ })).toBeNull();
   });
 });
+
+describe('BackupTab — local folder copy, desktop vs mobile', () => {
+  it('desktop (isMobile unset): shows the folder-picker button and Mac copy', () => {
+    render(<BackupTab {...baseProps} />);
+    expect(screen.getByRole('button', { name: 'Choose a folder…' })).toBeTruthy();
+    expect(screen.getByText(/a folder on your Mac/)).toBeTruthy();
+  });
+
+  it('mobile: shows "Enable local backup" and the Documents/Files-app copy, no picker', () => {
+    render(<BackupTab {...baseProps} isMobile />);
+    expect(screen.getByRole('button', { name: 'Enable local backup' })).toBeTruthy();
+    expect(screen.getByText(/Files app under FlightSync Light/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Choose a folder…' })).toBeNull();
+  });
+
+  it('mobile with a folder configured: hides "Change folder" (fixed, non-choosable path)', () => {
+    render(<BackupTab {...baseProps} isMobile backupFolder="/mock/Documents/FlightSync Light Backups" />);
+    expect(screen.getByRole('button', { name: 'Back up now' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restore from folder' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Turn off' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Change folder' })).toBeNull();
+  });
+
+  it('desktop with a folder configured: still shows "Change folder"', () => {
+    render(<BackupTab {...baseProps} backupFolder="/Users/pilote/Backups" />);
+    expect(screen.getByRole('button', { name: 'Change folder' })).toBeTruthy();
+  });
+});

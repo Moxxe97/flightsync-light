@@ -3,6 +3,8 @@ import './App.css';
 import { exportICS } from './utils/icsExport';
 import { runBackup, findBackup, downloadBackup, restoreBlobs, persistRestoreData, BACKUP_FILENAME } from './utils/driveBackup';
 import { runFolderBackup, restoreFolderBlobs, ensureFolderAccess } from './utils/folderBackup';
+import { isMobilePlatform } from './utils/platform';
+import { mobileBackupRoot } from './utils/mobileBackupRoot';
 import { tallyResidence } from './utils/residence';
 import { selectDisplayData, archiveYearList, adjacentYear } from './utils/archiveView';
 import { getAllBoardingPassDates } from '@flightsync/core/idb';
@@ -105,6 +107,16 @@ export default function FlightSyncSystem() {
     backupFolder: '', // local folder destination for folder auto-backup
   });
   const [isLoading, setIsLoading] = useState(true);
+  // Distinct from `isMobile` above (viewport width) — this is the Tauri
+  // platform (Android/iOS vs desktop), computed once at mount since it can't
+  // change at runtime. Drives platform-aware local-backup copy in BackupTab.
+  const [isMobilePlatformDevice, setIsMobilePlatformDevice] = useState(false);
+  useEffect(() => {
+    // Falls back to `false` (desktop copy) outside a real Tauri webview —
+    // e.g. tests/jsdom, where window.__TAURI_INTERNALS__ is undefined and
+    // the underlying invoke() throws instead of rejecting cleanly.
+    isMobilePlatform().then(setIsMobilePlatformDevice).catch(() => setIsMobilePlatformDevice(false));
+  }, []);
   const backupTimerRef = useRef(null);
   const backupStatusResetRef = useRef(null);
   const folderBackupTimerRef = useRef(null);
@@ -569,6 +581,23 @@ export default function FlightSyncSystem() {
 
   // ─── FOLDER PICKER ───────────────────────────────────
   const chooseBackupFolder = async () => {
+    // Mobile (Android + iOS): the Tauri dialog plugin's folder picker isn't
+    // implemented on mobile (verified on-device — it rejects with "Folder
+    // picker is not implemented on mobile"). Local backup instead targets a
+    // fixed subfolder of the app's Documents dir; no picker UI needed.
+    if (await isMobilePlatform()) {
+      try {
+        const folder = await mobileBackupRoot();
+        await ensureFolderAccess(folder);
+        const newSettings = { ...settings, backupFolder: folder };
+        setSettings(newSettings);
+        await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+        notify('Local backup enabled (app Documents folder)', 'success');
+      } catch (err) {
+        notify(`Could not enable local backup: ${err.message}`, 'error');
+      }
+      return;
+    }
     const invoke = window.__TAURI_INTERNALS__?.invoke;
     if (!invoke) return;
     const folder = await invoke('plugin:dialog|open', {
@@ -1092,6 +1121,7 @@ export default function FlightSyncSystem() {
           disableFolderBackup={disableFolderBackup}
           runFolderBackupNow={runFolderBackupNow}
           restoreFromFolder={restoreFromFolder}
+          isMobile={isMobilePlatformDevice}
         />
       )}
 
@@ -1147,9 +1177,7 @@ export default function FlightSyncSystem() {
     }}>
       {/* ─── NOTIFICATION TOAST ───────────────────────── */}
       {notification && (
-        <div style={{
-          position: "fixed", top: 20, right: 20, zIndex: 1000,
-          padding: "14px 24px", borderRadius: 12,
+        <div className="notification-toast" style={{
           background: notification.type === "success" ? "#064e3b" : notification.type === "error" ? "#7f1d1d" : "#1e2a45",
           color: notification.type === "success" ? "#6ee7b7" : notification.type === "error" ? "#fca5a5" : "#a0aec0",
           border: `1px solid ${notification.type === "success" ? "#065f46" : notification.type === "error" ? "#991b1b" : "#2d3748"}`,
@@ -1432,7 +1460,7 @@ export default function FlightSyncSystem() {
       <ConfirmModal
         open={signOutConfirm}
         title="Sign out?"
-        message="Your data stays on this Mac; the Drive backup stays on your Google account."
+        message="Your data stays on this device; the Drive backup stays on your Google account."
         confirmLabel="Sign out"
         cancelLabel="Cancel"
         onConfirm={() => { setSignOutConfirm(false); signOut().catch((e) => notify(e?.message || "Sign-out failed", "error")); }}
@@ -1442,7 +1470,7 @@ export default function FlightSyncSystem() {
       <ConfirmModal
         open={!!restoreOffer}
         title="Backup found on Google Drive"
-        message="Restoring will REPLACE this Mac's flights and residence days with the contents of the Google Drive backup. A snapshot of the current data is kept locally before the overwrite, but there is no one-click undo button yet."
+        message="Restoring will REPLACE this device's flights and residence days with the contents of the Google Drive backup. A snapshot of the current data is kept locally before the overwrite, but there is no one-click undo button yet."
         confirmLabel="Restore"
         cancelLabel="Later"
         onConfirm={() => {

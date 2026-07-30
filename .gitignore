@@ -37,3 +37,15 @@ apps/desktop/src/config.js
 # Internal tooling / design scaffolding — not for the public repo
 .superpowers/
 docs/superpowers/
+
+# Android signing — never in the public repo
+apps/desktop/src-tauri/gen/android/keystore.properties
+*.jks
+*.keystore
+
+# iOS signing/build artifacts — never in the public repo
+apps/desktop/src-tauri/gen/apple/build/
+*.mobileprovision
+*.p12
+ExportOptions.plist
+AuthKey_*.p8

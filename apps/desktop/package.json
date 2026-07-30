@@ -1,7 +1,7 @@
 {
   "name": "flight-sync-light-desktop",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,9 @@
   "dependencies": {
     "@flightsync/core": "workspace:*",
     "@tauri-apps/api": "^2.11",
+    "@tauri-apps/plugin-deep-link": "^2",
     "@tauri-apps/plugin-fs": "^2",
+    "@tauri-apps/plugin-opener": "^2",
     "luxon": "^3.7.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",

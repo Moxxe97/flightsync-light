@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "FlightSync Light",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "identifier": "com.flightsynclight.app",
   "build": {
     "frontendDist": "../dist",
@@ -51,6 +51,14 @@
         "appPosition": { "x": 160, "y": 185 },
         "applicationFolderPosition": { "x": 500, "y": 185 }
       }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        { "scheme": ["com.googleusercontent.apps.931865050674-bm1m3hl17ck1kpgp3vm2o3tnrvnv4s9u"], "appLink": false },
+        { "scheme": ["com.googleusercontent.apps.931865050674-htei8hrqpcve9c142cbk4m3j9tg17q5r"], "appLink": false }
+      ]
     }
   }
 }

@@ -1,6 +1,10 @@
+#[cfg(desktop)]
 use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(desktop)]
 use std::net::{Shutdown, TcpListener, TcpStream};
+#[cfg(desktop)]
 use std::time::{Duration, Instant};
+#[cfg(any(desktop, target_os = "android"))]
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
@@ -21,24 +25,29 @@ use tauri_plugin_fs::FsExt;
 // Fixed port — must match an entry in the OAuth client's
 // "Authorized redirect URIs". Google's Web client type doesn't
 // allow arbitrary ports, only exact URI matches.
+#[cfg(desktop)]
 const OAUTH_PORT: u16 = 8765;
 
 // Give up waiting for a connection after this long. Matches the JS-side 5-minute
 // OAuth timeout so a cancelled sign-in (the redirect never arrives) doesn't leave
 // the accept() blocked forever holding port 8765 — which would make the next
 // sign-in attempt fail to bind until the app is restarted.
+#[cfg(desktop)]
 const ACCEPT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 // Cap how much of an incoming request we read. Our HTTP request line is well
 // under this; the bound stops a local process from streaming unbounded data
 // into memory (audit R2).
+#[cfg(desktop)]
 const MAX_REQUEST_BYTES: u64 = 8 * 1024;
 
 // Per-connection read timeout so one silent connection can't wedge the listener
 // thread (and hold port 8765) until the app restarts (audit R3).
+#[cfg(desktop)]
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Code (or error) extracted from the loopback redirect query string.
+#[cfg(desktop)]
 #[derive(Default)]
 struct CallbackResult {
     code: String,
@@ -49,6 +58,7 @@ struct CallbackResult {
 /// Extract the request target (path + optional query) from an HTTP request
 /// line like `GET /cb?access_token=… HTTP/1.1`. Returns `None` if the line is
 /// malformed (missing method/target).
+#[cfg(desktop)]
 fn request_target(request_line: &str) -> Option<&str> {
     request_line.split_whitespace().nth(1)
 }
@@ -56,6 +66,7 @@ fn request_target(request_line: &str) -> Option<&str> {
 /// The code-flow redirect lands on `/?code=…&state=…` (redirect_uri is the
 /// bare loopback origin). Anything else — bare `/`, old `/cb`, favicon — is a
 /// stray request.
+#[cfg(desktop)]
 fn is_callback_path(target: &str) -> bool {
     matches!(target.split_once('?'), Some(("/", q)) if !q.is_empty())
 }
@@ -63,6 +74,7 @@ fn is_callback_path(target: &str) -> bool {
 /// Parse the redirect query string into a code/state (or error). Uses the same
 /// minimal percent-decode as before (the auth code is percent-encoded by
 /// Google — `4/0A…` arrives as `4%2F0A…`).
+#[cfg(desktop)]
 fn parse_callback_query(query: &str) -> CallbackResult {
     let mut result = CallbackResult::default();
     for pair in query.split('&') {
@@ -87,12 +99,14 @@ fn parse_callback_query(query: &str) -> CallbackResult {
 /// `error`. A request that matches the callback path but has neither (a local
 /// probe like `/?x=1`) must NOT consume the one-shot handshake slot (audit
 /// M5).
+#[cfg(desktop)]
 fn is_terminal_callback(result: &CallbackResult) -> bool {
     !result.code.is_empty() || !result.error.is_empty()
 }
 
 /// Read just the request line from a stream, bounded in both bytes (R2) and
 /// time (R3). Returns the raw request line (may retain trailing CRLF).
+#[cfg(desktop)]
 fn read_request_line(stream: &TcpStream) -> String {
     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
     let mut request_line = String::new();
@@ -104,6 +118,7 @@ fn read_request_line(stream: &TcpStream) -> String {
 /// Best-effort: half-close the write side after responding so the peer can read
 /// our response before the socket is fully dropped, rather than being RST'd
 /// mid-read (audit R8).
+#[cfg(desktop)]
 fn finish_response(stream: &TcpStream) {
     let _ = stream.shutdown(Shutdown::Write);
 }
@@ -113,6 +128,7 @@ fn finish_response(stream: &TcpStream) {
 // accept in the loop so the listener never holds port 8765 longer than
 // ACCEPT_TIMEOUT in total — including the cancelled / stray-path cases
 // (audit R5/R6). On timeout the caller drops the listener, freeing the port.
+#[cfg(desktop)]
 fn accept_until(
     listener: &TcpListener,
     deadline: Instant,
@@ -141,6 +157,7 @@ fn accept_until(
     result
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn start_oauth_listener(app: tauri::AppHandle) -> Result<u16, String> {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", OAUTH_PORT))
@@ -262,6 +279,7 @@ fn start_oauth_listener(app: tauri::AppHandle) -> Result<u16, String> {
 
 /// open_google_auth_window takes a caller-supplied URL from JS. Only Google's
 /// OAuth page is ever legitimate (audit #25).
+#[cfg(desktop)]
 fn is_allowed_auth_url(auth_url: &str) -> bool {
     match auth_url.parse::<url::Url>() {
         Ok(u) => u.scheme() == "https" && u.host_str() == Some("accounts.google.com"),
@@ -272,6 +290,7 @@ fn is_allowed_auth_url(auth_url: &str) -> bool {
 /// Open Google OAuth (authorization-code flow) in a dedicated WebviewWindow.
 /// The redirect back to 127.0.0.1 is handled by start_oauth_listener. This is a
 /// Mac-only app, so there is no mobile/system-browser variant.
+#[cfg(desktop)]
 #[tauri::command]
 fn open_google_auth_window(app: tauri::AppHandle, auth_url: String) -> Result<(), String> {
     if !is_allowed_auth_url(&auth_url) {
@@ -298,9 +317,12 @@ fn open_google_auth_window(app: tauri::AppHandle, auth_url: String) -> Result<()
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 const KEYCHAIN_SERVICE: &str = "com.flightsynclight.app";
+#[cfg(not(target_os = "android"))]
 const KEYCHAIN_USER: &str = "google-refresh-token";
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_refresh_token(token: String) -> Result<(), String> {
     keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
@@ -308,6 +330,7 @@ fn save_refresh_token(token: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn load_refresh_token() -> Result<Option<String>, String> {
     match keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
@@ -319,6 +342,7 @@ fn load_refresh_token() -> Result<Option<String>, String> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn delete_refresh_token() -> Result<(), String> {
     match keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
@@ -326,6 +350,78 @@ fn delete_refresh_token() -> Result<(), String> {
     {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(e.to_string()),
+    }
+}
+
+// Android has no keyring backend; refresh tokens are stored via the
+// KeystorePlugin, a small Kotlin plugin backed by the Android Keystore
+// (AES256 master key, EncryptedSharedPreferences) — see the
+// android_keystore module below and gen/android/.../KeystorePlugin.kt.
+#[cfg(target_os = "android")]
+mod android_keystore {
+    use serde::Deserialize;
+    use tauri::{
+        plugin::{Builder, PluginHandle, TauriPlugin},
+        Manager, Runtime,
+    };
+
+    #[derive(Deserialize)]
+    pub struct LoadResponse {
+        pub token: Option<String>,
+    }
+
+    pub struct Keystore<R: Runtime>(pub PluginHandle<R>);
+
+    pub fn init<R: Runtime>() -> TauriPlugin<R> {
+        Builder::new("fslkeystore")
+            .setup(|app, api| {
+                let handle = api.register_android_plugin("com.flightsynclight.app", "KeystorePlugin")?;
+                app.manage(Keystore(handle));
+                Ok(())
+            })
+            .build()
+    }
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn save_refresh_token(app: tauri::AppHandle, token: String) -> Result<(), String> {
+    app.state::<android_keystore::Keystore<tauri::Wry>>()
+        .0
+        .run_mobile_plugin::<serde_json::Value>("save", serde_json::json!({ "token": token }))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn load_refresh_token(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    app.state::<android_keystore::Keystore<tauri::Wry>>()
+        .0
+        .run_mobile_plugin::<android_keystore::LoadResponse>("load", serde_json::json!({}))
+        .map(|r| r.token)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn delete_refresh_token(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<android_keystore::Keystore<tauri::Wry>>()
+        .0
+        .run_mobile_plugin::<serde_json::Value>("delete", serde_json::json!({}))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Lets JS branch its OAuth flow without pulling in the os plugin.
+#[tauri::command]
+fn platform_name() -> String {
+    if cfg!(target_os = "android") {
+        "android".into()
+    } else if cfg!(target_os = "ios") {
+        "ios".into()
+    } else {
+        "desktop".into()
     }
 }
 
@@ -346,17 +442,39 @@ fn allow_backup_folder(app: tauri::AppHandle, path: String) -> Result<(), String
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![
-            start_oauth_listener,
-            open_google_auth_window,
-            save_refresh_token,
-            load_refresh_token,
-            delete_refresh_token,
-            allow_backup_folder
-        ])
+        .plugin(tauri_plugin_fs::init());
+
+    #[cfg(mobile)]
+    let builder = builder
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_opener::init());
+
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(android_keystore::init());
+
+    #[cfg(desktop)]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        start_oauth_listener,
+        open_google_auth_window,
+        save_refresh_token,
+        load_refresh_token,
+        delete_refresh_token,
+        allow_backup_folder,
+        platform_name
+    ]);
+
+    #[cfg(mobile)]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        save_refresh_token,
+        load_refresh_token,
+        delete_refresh_token,
+        allow_backup_folder,
+        platform_name
+    ]);
+
+    builder
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -371,7 +489,7 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-#[cfg(test)]
+#[cfg(all(test, desktop))]
 mod tests {
     use super::{
         is_allowed_auth_url, is_callback_path, is_terminal_callback, parse_callback_query,

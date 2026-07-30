@@ -75,7 +75,7 @@ export default class ErrorBoundary extends Component {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
             <p style={{ margin: 0, fontSize: 13, color: '#fca5a5', maxWidth: 420, textAlign: 'center' }}>
               Irreversible action: erases local flights/residence data (archives and
-              flight plans are kept). Your data is stored locally on this Mac.
+              flight plans are kept). Your data is stored locally on this device.
             </p>
             <button
               onClick={this.resetLocalData}

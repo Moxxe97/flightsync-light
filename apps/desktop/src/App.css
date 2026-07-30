@@ -8,6 +8,32 @@
   100% { box-shadow: 0 0 0 0 rgba(99,179,237,0); }
 }
 
+/* ─── Notification toast ───────────────────────────── */
+/* Desktop default: small pill, top-right. On phones (below) this widens to a
+   full-width banner instead — the pill's shrink-to-fit width was collapsing
+   long error messages against the right edge, clipping the text off-screen. */
+.notification-toast {
+  position: fixed;
+  top: calc(20px + env(safe-area-inset-top));
+  right: calc(20px + env(safe-area-inset-right));
+  z-index: 1000;
+  max-width: min(360px, calc(100vw - 40px));
+  word-break: break-word;
+  padding: 14px 24px;
+  border-radius: 12px;
+}
+
+@media (max-width: 767px) {
+  .notification-toast {
+    top: calc(12px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+    left: calc(12px + env(safe-area-inset-left));
+    max-width: none;
+    width: auto;
+    padding: 12px 16px;
+  }
+}
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 3px; }

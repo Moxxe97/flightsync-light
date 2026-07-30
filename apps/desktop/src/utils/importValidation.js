@@ -23,7 +23,9 @@ const MAX_NOTES_LEN = 4000;
 // literal "\n"; csvEscape quotes the field) — rejecting them here would just
 // break legitimate saved notes on the next backup restore. Fields that should
 // never contain a line break (date, flightNumber, location) get the strict form.
+// eslint-disable-next-line no-control-regex -- intentional: strips control chars per security audit H4
 const CONTROL_CHARS_RE = /[\x00-\x1F\x7F]/;
+// eslint-disable-next-line no-control-regex -- intentional: strips control chars per security audit H4
 const CONTROL_CHARS_NO_NEWLINE_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 
 function hasControlChars(s, { allowNewlines = false } = {}) {
