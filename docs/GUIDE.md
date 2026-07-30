@@ -26,6 +26,7 @@ A macOS logbook for airline pilots — free, no account required, all your data 
 ---
 
 ## 2. Install on your phone
+{: #install-on-your-phone}
 
 FlightSync Light also runs on iPhone and Android, with the same local-first data model as the Mac app.
 
