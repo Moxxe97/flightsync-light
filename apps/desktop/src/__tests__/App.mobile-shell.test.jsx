@@ -13,7 +13,7 @@
 // the actual wiring, not test doubles.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 
 // This jsdom instance ships without a usable localStorage; App reads/writes it
 // during startup. Install a minimal in-memory polyfill before App is imported.
@@ -38,6 +38,14 @@ vi.mock('../utils/useIsMobile', () => ({
 }));
 vi.mock('../utils/useMobileNav', () => ({
   useMobileNav: () => ({ section: mobileState.section, open: openSpy, back: backSpy }),
+}));
+
+// Tauri platform (android/ios vs desktop) — distinct from the viewport-width
+// isMobile above. Drives the permanently-expanded shell on phones.
+let mobilePlatform = false;
+vi.mock('../utils/platform', () => ({
+  getPlatform: vi.fn(async () => (mobilePlatform ? 'android' : 'desktop')),
+  isMobilePlatform: vi.fn(async () => mobilePlatform),
 }));
 
 // ─── Auth: the app renders for everyone; provide a signed-in profile ───
@@ -149,5 +157,34 @@ describe('App responsive shell wiring', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /back to menu/i }));
     expect(backSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('permanently expanded shell on mobile platforms', () => {
+  // On Android/iOS the full-bleed presentation (the old ⤢ toggle's fixed
+  // inset-0 overlay, which removes the visible edges around the WebView)
+  // is always on and the toggle button is gone. Desktop keeps the toggle.
+  beforeEach(() => {
+    mobileState = { isMobile: true, section: null };
+    mobilePlatform = false;
+  });
+  afterEach(() => cleanup());
+
+  it('android/ios: shell is always full-bleed and the fullscreen toggle is absent', async () => {
+    mobilePlatform = true;
+    const { container } = await renderApp();
+    await waitFor(() => expect(container.firstChild.style.position).toBe('fixed'));
+    expect(container.firstChild.style.inset).toBe('0px');
+    expect(screen.queryByTitle(/full screen/i)).toBeNull();
+  });
+
+  it('desktop: toggle renders and full-bleed stays opt-in', async () => {
+    mobileState = { isMobile: false, section: null };
+    mobilePlatform = false;
+    const { container } = await renderApp();
+    expect(screen.getByTitle('Full screen')).toBeDefined();
+    expect(container.firstChild.style.position).not.toBe('fixed');
+    fireEvent.click(screen.getByTitle('Full screen'));
+    expect(container.firstChild.style.position).toBe('fixed');
   });
 });
