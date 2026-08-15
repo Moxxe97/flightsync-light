@@ -41,6 +41,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    },
     "macOS": {
       "minimumSystemVersion": "13.0",
       "signingIdentity": "-",
