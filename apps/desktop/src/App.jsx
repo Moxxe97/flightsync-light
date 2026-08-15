@@ -1181,7 +1181,10 @@ export default function FlightSyncSystem() {
   return (
     <div style={{
       minHeight: "100vh", background: "#0a0f1e", fontFamily: "'DM Sans', system-ui, sans-serif", color: "#e2e8f0",
-      ...(isFullscreen ? { position: "fixed", inset: 0, zIndex: 99999, overflowY: "auto", width: "100vw", height: "100vh" } : {}),
+      // Android/iOS are permanently full-bleed (the old ⤢ toggle's overlay,
+      // which removes the visible edges around the WebView); desktop keeps
+      // the opt-in toggle.
+      ...(isFullscreen || isMobilePlatformDevice ? { position: "fixed", inset: 0, zIndex: 99999, overflowY: "auto", width: "100vw", height: "100vh" } : {}),
     }}>
       {/* ─── NOTIFICATION TOAST ───────────────────────── */}
       {notification && (
@@ -1321,14 +1324,16 @@ export default function FlightSyncSystem() {
             Back up
           </button>
 
-          <button
-            className="btn btn-secondary"
-            onClick={toggleFullscreen}
-            style={{ padding: "8px 12px" }}
-            title={isFullscreen ? "Exit full screen" : "Full screen"}
-          >
-            {isFullscreen ? <Icons.ExitFullscreen /> : <Icons.Fullscreen />}
-          </button>
+          {!isMobilePlatformDevice && (
+            <button
+              className="btn btn-secondary"
+              onClick={toggleFullscreen}
+              style={{ padding: "8px 12px" }}
+              title={isFullscreen ? "Exit full screen" : "Full screen"}
+            >
+              {isFullscreen ? <Icons.ExitFullscreen /> : <Icons.Fullscreen />}
+            </button>
+          )}
         </div>
       </header>
 
