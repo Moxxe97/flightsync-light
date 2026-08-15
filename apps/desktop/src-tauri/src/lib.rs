@@ -383,6 +383,67 @@ mod android_keystore {
     }
 }
 
+// Android has no working blob+<a download> path in the WebView, so exports
+// (CSV / ICS / JSON) are written into the public MediaStore Downloads
+// collection by the Kotlin DownloadsPlugin — same bridge pattern as
+// KeystorePlugin above. iOS doesn't need this: exports go to the app
+// Documents dir via plugin-fs (Files-app visible through UIFileSharingEnabled).
+#[cfg(target_os = "android")]
+mod android_downloads {
+    use serde::Deserialize;
+    use tauri::{
+        plugin::{Builder, PluginHandle, TauriPlugin},
+        Manager, Runtime,
+    };
+
+    #[derive(Deserialize)]
+    pub struct SaveFileResponse {
+        pub path: String,
+    }
+
+    pub struct Downloads<R: Runtime>(pub PluginHandle<R>);
+
+    pub fn init<R: Runtime>() -> TauriPlugin<R> {
+        Builder::new("fsldownloads")
+            .setup(|app, api| {
+                let handle = api.register_android_plugin("com.flightsynclight.app", "DownloadsPlugin")?;
+                app.manage(Downloads(handle));
+                Ok(())
+            })
+            .build()
+    }
+}
+
+/// Save an export file. Android-only: routes to the Kotlin DownloadsPlugin
+/// (public Downloads via MediaStore) and returns the user-visible path.
+/// Desktop uses the browser download and iOS the plugin-fs Documents path.
+#[tauri::command]
+fn save_export_file(
+    app: tauri::AppHandle,
+    file_name: String,
+    mime: String,
+    contents: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+        return app
+            .state::<android_downloads::Downloads<tauri::Wry>>()
+            .0
+            .run_mobile_plugin::<android_downloads::SaveFileResponse>(
+                "saveFile",
+                serde_json::json!({ "fileName": file_name, "mime": mime, "contents": contents }),
+            )
+            .map(|r| r.path)
+            .map_err(|e| e.to_string());
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, file_name, mime, contents);
+        Err("save_export_file is Android-only".into())
+    }
+}
+
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn save_refresh_token(app: tauri::AppHandle, token: String) -> Result<(), String> {
@@ -452,13 +513,16 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init());
 
     #[cfg(target_os = "android")]
-    let builder = builder.plugin(android_keystore::init());
+    let builder = builder
+        .plugin(android_keystore::init())
+        .plugin(android_downloads::init());
 
     #[cfg(desktop)]
     let builder = builder.invoke_handler(tauri::generate_handler![
         start_oauth_listener,
         open_google_auth_window,
         save_refresh_token,
+        save_export_file,
         load_refresh_token,
         delete_refresh_token,
         allow_backup_folder,
@@ -468,6 +532,7 @@ pub fn run() {
     #[cfg(mobile)]
     let builder = builder.invoke_handler(tauri::generate_handler![
         save_refresh_token,
+        save_export_file,
         load_refresh_token,
         delete_refresh_token,
         allow_backup_folder,

@@ -18,6 +18,7 @@ import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives } from
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
 import { parseBackupJson, sanitizeStoredRows, isValidFlight } from './utils/importValidation';
 import { buildFlightsCsv, looksLikeFlightRow } from './utils/exportCsv';
+import { saveExportFile } from './utils/saveExportFile';
 import Icons from './components/Icons';
 import { SECTIONS } from './navigation/sections';
 import { useIsMobile } from './utils/useIsMobile';
@@ -644,7 +645,7 @@ export default function FlightSyncSystem() {
   };
 
   // ─── IMPORT / EXPORT ─────────────────────────────────
-  const exportToJSON = () => {
+  const exportToJSON = async () => {
     // backupFolder is a machine-specific absolute path — never serialize it into an export file.
     const { backupFolder: _machineLocal, ...safeSettings } = settings;
     const exportData = {
@@ -666,18 +667,24 @@ export default function FlightSyncSystem() {
       },
     };
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `FlightSync-Light-Export-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    let savedTo;
+    try {
+      ({ location: savedTo } = await saveExportFile(
+        `FlightSync-Light-Export-${new Date().toISOString().split("T")[0]}.json`,
+        JSON.stringify(exportData, null, 2),
+        "application/json",
+      ));
+    } catch (err) {
+      notify("JSON export failed: " + (err?.message || err), "error");
+      return;
+    }
 
     const newSettings = { ...settings, lastBackup: now() };
     setSettings(newSettings);
     storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
-    notify("JSON backup exported successfully", "success");
+    notify(savedTo === "downloads" ? "JSON backup saved to Downloads"
+      : savedTo === "documents" ? "JSON backup saved — see the Files app"
+      : "JSON backup exported successfully", "success");
   };
 
   // ─── GOOGLE DRIVE AUTO-BACKUP ──────────────────────────
@@ -699,20 +706,24 @@ export default function FlightSyncSystem() {
     }
   }, [authUser, runDriveBackup, notify]);
 
-  const exportToCSV = () => {
+  const exportToCSV = async () => {
     if (flights.length === 0) {
       notify("No flights to export", "error");
       return;
     }
     const csv = buildFlightsCsv(flights, ["Date", "Flight", "Departure", "Arrival", "Canada Time (h)", "Total Time (h)", "% Canada"]);
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `AC-Flights-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    notify("CSV export complete", "success");
+    try {
+      const { location } = await saveExportFile(
+        `AC-Flights-${new Date().toISOString().split("T")[0]}.csv`,
+        "\ufeff" + csv,
+        "text/csv;charset=utf-8",
+      );
+      notify(location === "downloads" ? "CSV saved to Downloads"
+        : location === "documents" ? "CSV saved — see the Files app"
+        : "CSV export complete", "success");
+    } catch (err) {
+      notify("CSV export failed: " + (err?.message || err), "error");
+    }
   };
 
   // Tauri WKWebView doesn't reliably open native file pickers from <input type="file">,
@@ -905,10 +916,16 @@ export default function FlightSyncSystem() {
   };
 
   // ─── CALENDAR SYNC ───────────────────────────────────
-  const handleExportICS = () => {
+  const handleExportICS = async () => {
     if (flights.length === 0) { notify("No flights to export", "info"); return; }
-    exportICS(flights);
-    notify(`${flights.length} flight(s) exported to .ics`, "success");
+    try {
+      const { location } = await exportICS(flights);
+      notify(location === "downloads" ? `.ics saved to Downloads (${flights.length} flights)`
+        : location === "documents" ? `.ics saved — see the Files app (${flights.length} flights)`
+        : `${flights.length} flight(s) exported to .ics`, "success");
+    } catch (err) {
+      notify(".ics export failed: " + (err?.message || err), "error");
+    }
   };
 
   // ─── DAY PANEL SAVE ─────────────────────────────────

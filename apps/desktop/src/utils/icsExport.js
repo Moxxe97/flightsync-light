@@ -1,6 +1,7 @@
 // ─── ICS export (local .ics file, no Google) ─────────────────────
 
 import { icsEscape } from './exportEscape';
+import { saveExportFile } from './saveExportFile';
 
 // ─── ICS Export ───────────────────────────────────────────────
 // ICS lines are CRLF-delimited; unlike SUMMARY/DESCRIPTION (escaped) and UID
@@ -63,11 +64,9 @@ export function exportICS(flights) {
     'END:VCALENDAR',
   ].join('\r\n');
 
-  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `AC-Flights-${new Date().toISOString().split('T')[0]}.ics`;
-  a.click();
-  URL.revokeObjectURL(url);
+  return saveExportFile(
+    `AC-Flights-${new Date().toISOString().split('T')[0]}.ics`,
+    ics,
+    'text/calendar;charset=utf-8',
+  );
 }
