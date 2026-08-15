@@ -17,7 +17,7 @@ import { getAllOFPFlightIds, getAllBoardingPassInfo, getArchiveYear, getOFP } fr
 import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives } from './utils/archiveStore';
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
 import { parseBackupJson, sanitizeStoredRows, isValidFlight } from './utils/importValidation';
-import { csvEscape } from './utils/exportEscape';
+import { buildFlightsCsv, looksLikeFlightRow } from './utils/exportCsv';
 import Icons from './components/Icons';
 import { SECTIONS } from './navigation/sections';
 import { useIsMobile } from './utils/useIsMobile';
@@ -704,17 +704,7 @@ export default function FlightSyncSystem() {
       notify("No flights to export", "error");
       return;
     }
-    const headers = ["Date", "Flight", "Departure", "Arrival", "Total Time (h)", "Canada Time (h)", "% Canada", "Distance (nm)", "Canada Distance (nm)", "Notes"];
-    const rows = [...flights]
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((f) => [
-        f.date, f.flightNumber, f.departure, f.arrival,
-        f.totalTime, f.canadianTime,
-        f.distance > 0 ? ((f.canadianDistance / f.distance) * 100).toFixed(1) : "0",
-        f.distance || "", f.canadianDistance || "", f.notes || "",
-      ].map(csvEscape));
-
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csv = buildFlightsCsv(flights, ["Date", "Flight", "Departure", "Arrival", "Canada Time (h)", "Total Time (h)", "% Canada"]);
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -810,7 +800,8 @@ export default function FlightSyncSystem() {
           const parsedFlights = [];
           for (let i = 1; i < lines.length; i++) {
             const vals = lines[i].split(sep).map((v) => v.trim().replace(/^"|"$/g, ""));
-            if (!vals[dateCol]) continue;
+            // Skip the export's TOTAL line and text footers (any real date has a digit).
+            if (!looksLikeFlightRow(vals[dateCol])) continue;
 
             parsedFlights.push({
               id: `csv-import-${i}-${Date.now()}`,
