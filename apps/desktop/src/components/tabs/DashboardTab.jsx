@@ -2,6 +2,7 @@ import Icons from '../Icons';
 import { formatDate } from '@flightsync/core/util';
 import { useIsMobile } from '../../utils/useIsMobile';
 import { tallyResidence } from '../../utils/residence';
+import { residencyProgress } from '../../utils/residencyThreshold';
 
 export default function DashboardTab({
   flights,
@@ -223,19 +224,18 @@ export default function DashboardTab({
 
             {(() => {
               const outsideDays = tally.outside;
-              const pct = Math.min((outsideDays / 183) * 100, 100);
-              const remaining = 183 - outsideDays;
+              const { pct, crossed, margin } = residencyProgress(outsideDays);
               return (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
                     <span style={{ color: "#a0aec0" }}>Days outside Canada: <span className="mono" style={{ color: "#10b981" }}>{outsideDays}</span> / 183</span>
-                    <span style={{ color: "#64748b" }}>Remaining margin: <span className="mono" style={{ color: "#f59e0b" }}>{remaining}</span> days</span>
+                    <span style={{ color: "#64748b" }}>{crossed ? "Past threshold:" : "Remaining margin:"} <span className="mono" style={{ color: crossed ? "#10b981" : "#f59e0b" }}>{margin}</span> days</span>
                   </div>
                   <div style={{ height: 8, background: "#1e2a45", borderRadius: 4, overflow: "hidden" }}>
                     <div style={{
                       height: "100%", borderRadius: 4, transition: "width 1s ease",
                       width: `${pct}%`,
-                      background: pct < 60 ? "linear-gradient(90deg, #10b981, #34d399)" : pct < 85 ? "linear-gradient(90deg, #f59e0b, #fbbf24)" : "linear-gradient(90deg, #ef4444, #f87171)",
+                      background: crossed ? "linear-gradient(90deg, #10b981, #34d399)" : pct < 60 ? "linear-gradient(90deg, #10b981, #34d399)" : pct < 85 ? "linear-gradient(90deg, #f59e0b, #fbbf24)" : "linear-gradient(90deg, #ef4444, #f87171)",
                     }} />
                   </div>
                 </div>
