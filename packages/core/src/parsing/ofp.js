@@ -169,7 +169,21 @@ export function parseOfp(text) {
   const T = text.toUpperCase();
 
   // ── 1. Flight numbers ─────────────────────────────────────
-  const fnRaw = [...T.matchAll(/\bAC[A]?\s*0*(\d{1,4})\b/g)];
+  // Read from the header window only. The release header ("AC0328 / ACA328
+  // 04 APR 2026") sits in the first few hundred chars of every AC OFP; the
+  // rest of the document repeats that number (footers, NOTAMs, ICAO FPL) but
+  // weather pages also carry METAR remarks such as "RMK AC8" (altocumulus,
+  // 8 oktas) that match the same pattern and, scanned across the whole text,
+  // became phantom flights sharing the real flight's date, route and hours.
+  // When the release-header pair form ("AC0328 / ACA328") is present, only
+  // its number(s) count; otherwise any AC<n> token in the window; the
+  // whole-text scan remains only as a last resort when the window has none.
+  const HEADER = T.slice(0, 2000);
+  const fnPairRe = /\bAC[A]?\s*0*(\d{1,4})\s*\/\s*ACA\s*0*\d{1,4}\b/g;
+  const fnRe = /\bAC[A]?\s*0*(\d{1,4})\b/g;
+  let fnRaw = [...HEADER.matchAll(fnPairRe)];
+  if (fnRaw.length === 0) fnRaw = [...HEADER.matchAll(fnRe)];
+  if (fnRaw.length === 0) fnRaw = [...T.matchAll(fnRe)];
   let flightNums = [...new Set(fnRaw.map(m => m[1].padStart(4,'0')))];
 
   if (flightNums.length === 0) {
@@ -193,7 +207,6 @@ export function parseOfp(text) {
   // length of the dispatcher remarks, and "earliest date wins" then mis-dated
   // the flight (breaking the pay-summary match, or the fiscal year at New
   // Year). The window scan remains as a fallback for texts without that line.
-  const HEADER = T.slice(0, 2000);
   const headerDateRe = /\bAC[A]?\s*0*\d{1,4}\s*\/\s*ACA\s*0*\d{1,4}\s+(\d{1,2}[\s.]*(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[\s.]*\d{4})\b/;
   const headerDate = parseDate(HEADER.match(headerDateRe)?.[1]);
   const dateRe = /(\d{1,2})[\s.]*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[\s.]*(\d{4})/g;
