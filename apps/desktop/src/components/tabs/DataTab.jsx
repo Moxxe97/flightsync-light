@@ -10,6 +10,7 @@ export default function DataTab({
   handlePdfImport,
   notify,
   deviceId,
+  archiveYears = [],
   readOnly = false,
   onRescoreOfps,
   rescoreBusy = null,
@@ -17,7 +18,7 @@ export default function DataTab({
   return (
     <div style={{ animation: "fadeIn 0.3s ease" }}>
       {!readOnly && (
-        <PdfImportCard onImport={handlePdfImport} notify={notify} storedFlights={flights} deviceId={deviceId} style={{ marginBottom: 20 }} />
+        <PdfImportCard onImport={handlePdfImport} notify={notify} storedFlights={flights} archiveYears={archiveYears} deviceId={deviceId} style={{ marginBottom: 20 }} />
       )}
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>

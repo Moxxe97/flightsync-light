@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { selectDisplayData, archiveYearList, adjacentYear } from '../archiveView';
+import { selectDisplayData, archiveYearList, adjacentYear, flightsIncludingArchived } from '../archiveView';
 
 const archiveYears = [
   { year: '2025', flights: [{ id: 'a' }], residence: [{ date: '2025-01-01', location: 'canada' }] },
@@ -54,5 +54,16 @@ describe('adjacentYear', () => {
   });
   it('returns null when current is not in the list', () => {
     expect(adjacentYear(years, '2099', -1)).toBeNull();
+  });
+});
+
+describe('flightsIncludingArchived', () => {
+  it("returns the live flights followed by every archived year's flights", () => {
+    expect(flightsIncludingArchived([{ id: 'live' }], archiveYears)).toEqual([{ id: 'live' }, { id: 'a' }, { id: 'b' }]);
+  });
+
+  it('tolerates a missing archive list and years without flights', () => {
+    expect(flightsIncludingArchived([{ id: 'live' }], undefined)).toEqual([{ id: 'live' }]);
+    expect(flightsIncludingArchived([], [{ year: '2024' }])).toEqual([]);
   });
 });

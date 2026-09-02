@@ -34,3 +34,14 @@ export function adjacentYear(years, current, dir) {
   if (j < 0 || j >= asc.length) return null;
   return asc[j];
 }
+
+// Flights the pay-summary reconcile must know about: the live list plus every
+// archived year. The boot-time auto-archive moves prior-year flights out of
+// the live list, but a month's pay summary arrives ~2 weeks after month end —
+// so the December summary lands in January, after the year was archived, and
+// against the live list alone every one of its flights looked "missing" and
+// was offered again (a second copy of the whole month in the archived year).
+export function flightsIncludingArchived(liveFlights, archiveYears) {
+  const archived = (archiveYears || []).flatMap((a) => a?.flights || []);
+  return [...(liveFlights || []), ...archived];
+}

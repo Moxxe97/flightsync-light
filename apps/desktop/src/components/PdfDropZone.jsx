@@ -7,6 +7,7 @@ import { processPdfFile, parseFlightSummary, SUMMARY_HEADER, reconcile } from '@
 import { saveOFP } from '@flightsync/core/idb';
 import { estimateRoute } from '@flightsync/core/geo';
 import ReconciliationModal from './ReconciliationModal';
+import { flightsIncludingArchived } from '../utils/archiveView';
 
 // ─── PDF Trimming ─────────────────────────────────────────────
 // Extracts pages 0..cutPageIndex (inclusive) into a new PDF.
@@ -125,7 +126,7 @@ async function sniffPdfKind(file) {
 }
 
 // ─── Main Component ───────────────────────────────────────────
-export default function PdfDropZone({ onImport, notify, storedFlights = [], deviceId = 'unknown' }) {
+export default function PdfDropZone({ onImport, notify, storedFlights = [], archiveYears = [], deviceId = 'unknown' }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingFile, setProcessingFile] = useState('');
@@ -139,6 +140,8 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
   const dragCounter = useRef(0);
   const storedFlightsRef = useRef(storedFlights);
   useEffect(() => { storedFlightsRef.current = storedFlights; }, [storedFlights]);
+  const archiveYearsRef = useRef(archiveYears);
+  useEffect(() => { archiveYearsRef.current = archiveYears; }, [archiveYears]);
 
   const processFiles = useCallback(async (fileList) => {
     const pdfs = Array.from(fileList).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
@@ -185,7 +188,10 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], devi
         if (flownOnly.length === 0) {
           notify('Summary recognized but no flights found.', 'info');
         } else {
-          const current = storedFlightsRef.current;
+          // Live + archived: a summary dropped after the year rolled over must
+          // recognise the flights the auto-archive already filed away, or it
+          // offers the whole month again (see flightsIncludingArchived).
+          const current = flightsIncludingArchived(storedFlightsRef.current, archiveYearsRef.current);
           const { missing, matched } = reconcile(flownOnly, current);
           const missingWithEstimates = missing.map(f => ({
             ...f,
