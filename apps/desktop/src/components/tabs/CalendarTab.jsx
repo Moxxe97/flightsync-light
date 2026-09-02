@@ -196,7 +196,7 @@ export default function CalendarTab({
         {(() => {
           const counts = tallyResidence(residence);
           const outsideCanada = counts.outside;
-          const { pct, crossed, margin } = residencyProgress(outsideCanada);
+          const { pct, crossed, margin, threshold } = residencyProgress(outsideCanada, year);
           const barColor = crossed ? "#10b981" : pct < 60 ? "#10b981" : pct < 85 ? "#f59e0b" : "#ef4444";
 
           return (
@@ -217,7 +217,7 @@ export default function CalendarTab({
               </div>
               <div style={{ padding: 16, background: "#0a0f1e", borderRadius: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                  <span style={{ color: "#94a3b8" }}>Days outside Canada: <strong style={{ color: "#f1f5f9" }}>{outsideCanada}</strong> / 183</span>
+                  <span style={{ color: "#94a3b8" }}>Days outside Canada: <strong style={{ color: "#f1f5f9" }}>{outsideCanada}</strong> / {threshold}</span>
                   <span style={{ color: barColor, fontWeight: 600 }}>{crossed ? "Past threshold:" : "Margin:"} {margin} days</span>
                 </div>
                 <div style={{ height: 10, background: "#1e293b", borderRadius: 5, overflow: "hidden" }}>
