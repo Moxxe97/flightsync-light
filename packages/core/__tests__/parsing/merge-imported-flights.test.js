@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeImportedFlights } from '../../src/parsing/merge-flights.js';
+import { mergeImportedFlights, findExistingFlight } from '../../src/parsing/merge-flights.js';
 
 const opts = { timestamp: 1000, deviceId: 'dev-A' };
 
@@ -55,5 +55,23 @@ describe('mergeImportedFlights', () => {
     mergeImportedFlights(existing, incoming, opts);
     expect(existing[0].id).toBe('a');
     expect(existing).toHaveLength(1);
+  });
+});
+
+describe('findExistingFlight', () => {
+  // The OFP drop zone saves the PDF bytes under the id the merged row will
+  // carry. It must therefore resolve the existing row with the SAME key the
+  // merge uses (date + flightNumber), or the PDF ends up orphaned under the
+  // parsed id while the row keeps its summary/GCal id.
+  it('returns the stored flight sharing date + flightNumber', () => {
+    const existing = [{ id: 'f-2026-06-28-ac0904', date: '2026-06-28', flightNumber: 'AC0904' }];
+    expect(findExistingFlight(existing, { id: 'pdf-AC0904-2026-06-28-0', date: '2026-06-28', flightNumber: 'AC0904' }))
+      .toBe(existing[0]);
+  });
+
+  it('returns undefined when nothing matches', () => {
+    const existing = [{ id: 'f-2026-06-28-ac0904', date: '2026-06-28', flightNumber: 'AC0904' }];
+    expect(findExistingFlight(existing, { date: '2026-06-29', flightNumber: 'AC0904' })).toBeUndefined();
+    expect(findExistingFlight(undefined, { date: '2026-06-28', flightNumber: 'AC0904' })).toBeUndefined();
   });
 });
