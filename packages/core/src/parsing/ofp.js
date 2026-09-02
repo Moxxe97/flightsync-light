@@ -185,10 +185,20 @@ export function parseOfp(text) {
   }
 
   // ── 2. Dates ──────────────────────────────────────────────
+  // The flight date is the one on the release header line, anchored to the
+  // flight number: "AC0051 / ACA51 01 MAR 2026". Page 1 also ends with a
+  // running footer carrying the UTC scheduled departure ("ACA 0051 VIDP/CYUL
+  // 28.FEB.2026/1855Z"), which for an overnight eastbound departure is the
+  // PREVIOUS day; whether it fell inside the window below depended only on the
+  // length of the dispatcher remarks, and "earliest date wins" then mis-dated
+  // the flight (breaking the pay-summary match, or the fiscal year at New
+  // Year). The window scan remains as a fallback for texts without that line.
   const HEADER = T.slice(0, 2000);
+  const headerDateRe = /\bAC[A]?\s*0*\d{1,4}\s*\/\s*ACA\s*0*\d{1,4}\s+(\d{1,2}[\s.]*(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[\s.]*\d{4})\b/;
+  const headerDate = parseDate(HEADER.match(headerDateRe)?.[1]);
   const dateRe = /(\d{1,2})[\s.]*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[\s.]*(\d{4})/g;
   const isoRe  = /(\d{4})-(\d{2})-(\d{2})/g;
-  const rawDates = [
+  const rawDates = headerDate ? [headerDate] : [
     ...[...HEADER.matchAll(dateRe)].map(m => parseDate(m[0])),
     ...[...HEADER.matchAll(isoRe)].map(m => m[0]),
   ].filter(Boolean);
