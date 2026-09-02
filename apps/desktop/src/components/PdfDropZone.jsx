@@ -7,6 +7,7 @@ import { processPdfFile, parseFlightSummary, SUMMARY_HEADER, reconcile } from '@
 import { saveOFP } from '@flightsync/core/idb';
 import { estimateRoute } from '@flightsync/core/geo';
 import ReconciliationModal from './ReconciliationModal';
+import { findExistingFlight } from '@flightsync/core/parsing/merge-flights';
 import { flightsIncludingArchived } from '../utils/archiveView';
 
 // ─── PDF Trimming ─────────────────────────────────────────────
@@ -319,7 +320,14 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], arch
 
   const confirmImport = async () => {
     for (const { flightMeta, bytes, fileName, pageCount } of trimmedPdfs) {
-      for (const { id, date, flightNumber } of flightMeta) {
+      for (const meta of flightMeta) {
+        // Key the PDF by the id the merged row will actually carry: if a flight
+        // with the same date + number is already stored (pay summary, CSV…),
+        // handlePdfImport keeps THAT id, so the parsed pdf-… id would orphan the
+        // PDF. Resolve from the (possibly edited) preview row, same key as the merge.
+        const row = flights.find(f => f.id === meta.id) ?? meta;
+        const id = findExistingFlight(storedFlightsRef.current, row)?.id ?? meta.id;
+        const { date, flightNumber } = row;
         try {
           await saveOFP(id, { date, flightNumber, fileName, data: bytes, pageCount });
         } catch (err) {
