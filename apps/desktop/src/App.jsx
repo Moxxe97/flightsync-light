@@ -1144,6 +1144,7 @@ export default function FlightSyncSystem() {
           handlePdfImport={handlePdfImport}
           notify={notify}
           deviceId={deviceId}
+          archiveYears={archiveYears}
           readOnly={isArchiveView}
           onRescoreOfps={() => setRescoreConfirm(true)}
           rescoreBusy={rescoreBusy}

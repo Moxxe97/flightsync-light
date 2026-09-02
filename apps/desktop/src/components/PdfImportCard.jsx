@@ -11,6 +11,7 @@ export default function PdfImportCard({
   onImport,
   notify,
   storedFlights,
+  archiveYears,
   deviceId,
   title = "PDF IMPORT — FLIGHT PLANS",
   subtitle = "OFP or Crew Briefing — automatic flight extraction.",
@@ -25,7 +26,7 @@ export default function PdfImportCard({
         {subtitle}
       </p>
       <Suspense fallback={<div style={{ padding: 24, textAlign: "center", color: "#475569", fontSize: 12 }}>Loading PDF module…</div>}>
-        <PdfDropZone onImport={onImport} notify={notify} storedFlights={storedFlights} deviceId={deviceId} />
+        <PdfDropZone onImport={onImport} notify={notify} storedFlights={storedFlights} archiveYears={archiveYears} deviceId={deviceId} />
       </Suspense>
     </div>
   );
