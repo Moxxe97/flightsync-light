@@ -1,4 +1,5 @@
 import Icons from '../Icons';
+import { tallyResidence } from '../../utils/residence';
 
 export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpandedArchiveYear, onOpenYear, onBackupToDrive, onRestoreFromDrive }) {
   return (
@@ -36,8 +37,9 @@ export default function ArchiveTab({ archiveYears, expandedArchiveYear, setExpan
         const totalDistance = af.reduce((s, f) => s + (f.distance || 0), 0);
         const totalCanadianDistance = af.reduce((s, f) => s + (f.canadianDistance || 0), 0);
         const canadianPct = totalDistance > 0 ? ((totalCanadianDistance / totalDistance) * 100).toFixed(0) : 0;
-        const daysCanada = ar.filter(r => r.location === "canada").length;
-        const daysOutside = ar.filter(r => r.location !== "canada").length;
+        // Same counter as the Dashboard and the Calendar (distinct dates,
+        // location-less rows untracked) so archived years can never disagree.
+        const { canada: daysCanada, outside: daysOutside } = tallyResidence(ar);
         return (
           <div key={year} className="card" style={{ padding: 0, overflow: "hidden" }}>
             <button

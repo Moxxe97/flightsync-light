@@ -10,7 +10,11 @@ afterEach(cleanup);
 
 // Pull the "Days outside Canada: N / 183" number out of a rendered tab.
 function outsideShown(container) {
-  const m = container.textContent.match(/Days outside Canada\s*:\s*(\d+)\s*\/\s*183/);
+  const m = container.textContent.match(/Days outside Canada\s*:\s*(\d+)\s*\/\s*(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+function thresholdShown(container) {
+  const m = container.textContent.match(/Days outside Canada\s*:\s*\d+\s*\/\s*(\d+)/);
   return m ? Number(m[1]) : null;
 }
 
@@ -53,5 +57,33 @@ describe('Dashboard and Calendar agree on days out of Canada', () => {
     const dash = render(<DashboardTab {...dashProps} residence={residence} />);
     const cal = render(<CalendarTab {...calProps} residence={residence} />);
     expect(outsideShown(dash.container)).toBe(outsideShown(cal.container));
+  });
+});
+
+describe('183-day goal is year-aware and counts distinct days', () => {
+  it('shows 184 as the goal in a leap year and does not celebrate at 183 outside', () => {
+    const residence = Array.from({ length: 183 }, (_, i) => {
+      const d = new Date(Date.UTC(2028, 0, 1 + i));
+      return { date: d.toISOString().slice(0, 10), location: 'mexico' };
+    });
+    const dash = render(<DashboardTab {...dashProps} fiscalYear={{ ...dashProps.fiscalYear, year: 2028 }} residence={residence} />);
+    const cal = render(<CalendarTab {...calProps} year={2028} residence={residence} />);
+    expect(outsideShown(dash.container)).toBe(183);
+    expect(thresholdShown(dash.container)).toBe(184);
+    expect(thresholdShown(cal.container)).toBe(184);
+    expect(dash.container.textContent).toContain('Remaining margin');
+    expect(dash.container.textContent).not.toContain('Past threshold');
+  });
+
+  it('counts a duplicated date once on both tabs', () => {
+    const residence = [
+      { date: '2026-03-01', location: 'mexico' },
+      { date: '2026-03-01', location: 'mexico' },
+      { date: '2026-03-02', location: 'canada' },
+    ];
+    const dash = render(<DashboardTab {...dashProps} residence={residence} />);
+    const cal = render(<CalendarTab {...calProps} residence={residence} />);
+    expect(outsideShown(dash.container)).toBe(1);
+    expect(outsideShown(cal.container)).toBe(1);
   });
 });

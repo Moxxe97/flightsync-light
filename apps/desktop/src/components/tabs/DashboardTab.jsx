@@ -2,7 +2,7 @@ import Icons from '../Icons';
 import { formatDate } from '@flightsync/core/util';
 import { useIsMobile } from '../../utils/useIsMobile';
 import { tallyResidence } from '../../utils/residence';
-import { residencyProgress } from '../../utils/residencyThreshold';
+import { residencyProgress, residencyThresholdDays } from '../../utils/residencyThreshold';
 
 export default function DashboardTab({
   flights,
@@ -28,6 +28,7 @@ export default function DashboardTab({
   const isConnected = !!authUser;
   const isMobile = useIsMobile();
   const tally = tallyResidence(residence);
+  const threshold = residencyThresholdDays(fiscalYear?.year);
 
   return (
     <div style={{ animation: "fadeIn 0.3s ease" }}>
@@ -206,7 +207,7 @@ export default function DashboardTab({
           </div>
 
           <div>
-            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10, fontWeight: 600, letterSpacing: "0.04em" }}>TAX RESIDENCE — 183-DAY THRESHOLD</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10, fontWeight: 600, letterSpacing: "0.04em" }}>TAX RESIDENCE — {threshold}-DAY THRESHOLD</div>
             <div className="row-stack" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
               {[
                 { label: "🏠 CANADA", count: tally.canada, color: "#ef4444" },
@@ -224,11 +225,11 @@ export default function DashboardTab({
 
             {(() => {
               const outsideDays = tally.outside;
-              const { pct, crossed, margin } = residencyProgress(outsideDays);
+              const { pct, crossed, margin } = residencyProgress(outsideDays, fiscalYear?.year);
               return (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-                    <span style={{ color: "#a0aec0" }}>Days outside Canada: <span className="mono" style={{ color: "#10b981" }}>{outsideDays}</span> / 183</span>
+                    <span style={{ color: "#a0aec0" }}>Days outside Canada: <span className="mono" style={{ color: "#10b981" }}>{outsideDays}</span> / {threshold}</span>
                     <span style={{ color: "#64748b" }}>{crossed ? "Past threshold:" : "Remaining margin:"} <span className="mono" style={{ color: crossed ? "#10b981" : "#f59e0b" }}>{margin}</span> days</span>
                   </div>
                   <div style={{ height: 8, background: "#1e2a45", borderRadius: 4, overflow: "hidden" }}>

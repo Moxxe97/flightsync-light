@@ -46,6 +46,21 @@ describe('tallyResidence — single source of truth for day counts', () => {
     expect(t.outside).toBe(0); // and must never count as days away
   });
 
+  it('counts distinct dates, not rows — a duplicated date counts once, last entry wins', () => {
+    // Duplicate dates can only enter through a backup import (replace or merge
+    // both keep them); each copy used to add a day to the 183-day goal.
+    const t = tallyResidence([
+      { date: '2026-03-01', location: 'mexico' },
+      { date: '2026-03-01', location: 'mexico' },
+      { date: '2026-03-02', location: 'mexico' },
+      { date: '2026-03-02', location: 'canada' },
+    ]);
+    expect(t.total).toBe(2);
+    expect(t.mexico).toBe(1);
+    expect(t.canada).toBe(1);
+    expect(t.outside).toBe(1);
+  });
+
   it('handles empty and undefined input', () => {
     expect(tallyResidence([]).total).toBe(0);
     expect(tallyResidence(undefined).total).toBe(0);
