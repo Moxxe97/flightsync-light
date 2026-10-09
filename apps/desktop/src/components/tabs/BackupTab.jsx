@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import Icons from '../Icons';
 import { formatDate } from '@flightsync/core/util';
+import { documentYears, exportDocumentsZip, loadDocumentIndex } from '../../utils/documentsExport';
+import { listArchiveYears } from '../../utils/archiveStore';
 
 export default function BackupTab({
   flights,
@@ -28,6 +31,38 @@ export default function BackupTab({
   const errorDetail = status === 'error' ? backupState?.log?.[0]?.detail : null;
   const reconnectNeeded = !!errorDetail && /reconnection required/i.test(errorDetail);
   const actionsDisabled = !signedIn || status === 'syncing';
+
+  // ─── Flight documents ZIP (per-year OFPs + boarding passes) ───
+  // Index is metadata-light and loaded lazily when this tab mounts.
+  const [docIndex, setDocIndex] = useState(null); // { ofpMetas, bps }
+  const [docYear, setDocYear] = useState('');
+  const [docStatus, setDocStatus] = useState('');
+  useEffect(() => {
+    let alive = true;
+    loadDocumentIndex().then((idx) => {
+      if (!alive) return;
+      setDocIndex(idx);
+      const years = documentYears(idx);
+      setDocYear((y) => y || years[0] || '');
+    }).catch(() => { if (alive) setDocIndex({ ofpMetas: [], bps: [] }); });
+    return () => { alive = false; };
+  }, []);
+  const docYearList = docIndex ? documentYears(docIndex) : [];
+
+  const handleExportDocuments = async () => {
+    if (!docIndex || !docYear) return;
+    setDocStatus('Building ZIP…');
+    try {
+      const archived = (await listArchiveYears()).flatMap((y) => y.flights || []);
+      const result = await exportDocumentsZip(docYear, { ...docIndex, flights: [...flights, ...archived] });
+      setDocStatus(
+        result.location === 'downloads' ? `Saved to ${result.path}`
+          : result.location === 'documents' ? 'Saved to the Files app (FlightSync Light folder)'
+            : 'Downloaded');
+    } catch (err) {
+      setDocStatus(`Export failed: ${err?.message || err}`);
+    }
+  };
 
   return (
     <div style={{ animation: "fadeIn 0.3s ease", display: "grid", gap: 20 }}>
@@ -215,6 +250,37 @@ export default function BackupTab({
         <button className="btn btn-success" onClick={exportToCSV}>
           <Icons.Download /> Export CSV
         </button>
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: "linear-gradient(135deg, #b45309, #92400e)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icons.Download />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: "#f1f5f9" }}>Flight documents (ZIP)</h3>
+            <p style={{ fontSize: 12, color: "#64748b" }}>All OFPs and boarding passes for a year — for audits and record requests</p>
+          </div>
+        </div>
+        {docYearList.length === 0 ? (
+          <p style={{ fontSize: 12, color: "#64748b" }}>
+            {docIndex ? 'No stored documents yet — import OFP PDFs in the Data tab first.' : 'Loading…'}
+          </p>
+        ) : (
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={docYear}
+              onChange={(e) => { setDocYear(e.target.value); setDocStatus(''); }}
+              style={{ background: "#0a0f1e", color: "#f1f5f9", border: "1px solid #1e2a45", borderRadius: 8, padding: "10px 14px", fontSize: 14 }}
+            >
+              {docYearList.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button className="btn btn-primary" onClick={handleExportDocuments}>
+              <Icons.Download /> Download ZIP
+            </button>
+            {docStatus && <span style={{ fontSize: 12, color: docStatus.startsWith('Export failed') ? "#f87171" : "#64748b" }}>{docStatus}</span>}
+          </div>
+        )}
       </div>
 
       <div className="card">

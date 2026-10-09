@@ -8,12 +8,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/plugin-fs', () => ({
   writeTextFile: vi.fn(async () => {}),
+  writeFile: vi.fn(async () => {}),
   BaseDirectory: { Document: 6 },
 }));
 vi.mock('../platform', () => ({ getPlatform: vi.fn() }));
 
 const { invoke } = await import('@tauri-apps/api/core');
-const { writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+const { writeTextFile, writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
 const { getPlatform } = await import('../platform');
 const { saveExportFile } = await import('../saveExportFile');
 
@@ -65,6 +66,27 @@ describe('saveExportFile', () => {
     expect(writeTextFile).toHaveBeenCalledWith('x.ics', 'BEGIN:VCALENDAR', { baseDir: BaseDirectory.Document });
     expect(res).toEqual({ location: 'documents', path: 'x.ics' });
     expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  it('Tauri Android: binary content goes up as base64 (ZIP export)', async () => {
+    window.__TAURI_INTERNALS__ = {};
+    getPlatform.mockResolvedValue('android');
+    invoke.mockResolvedValue('Download/docs.zip');
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]); // "PK.."
+    const res = await saveExportFile('docs.zip', bytes, 'application/zip');
+    expect(invoke).toHaveBeenCalledWith('save_export_file', {
+      fileName: 'docs.zip', mime: 'application/zip', contentsB64: btoa('PK\x03\x04'),
+    });
+    expect(res).toEqual({ location: 'downloads', path: 'Download/docs.zip' });
+  });
+
+  it('Tauri iOS: binary content uses the binary write, not writeTextFile', async () => {
+    window.__TAURI_INTERNALS__ = {};
+    getPlatform.mockResolvedValue('ios');
+    const bytes = new Uint8Array([1, 2, 3]);
+    await saveExportFile('docs.zip', bytes, 'application/zip');
+    expect(writeFile).toHaveBeenCalledWith('docs.zip', bytes, { baseDir: BaseDirectory.Document });
+    expect(writeTextFile).not.toHaveBeenCalled();
   });
 
   it('propagates a save failure so the caller can show an error toast', async () => {

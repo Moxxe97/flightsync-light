@@ -422,7 +422,8 @@ fn save_export_file(
     app: tauri::AppHandle,
     file_name: String,
     mime: String,
-    contents: String,
+    contents: Option<String>,
+    contents_b64: Option<String>,
 ) -> Result<String, String> {
     #[cfg(target_os = "android")]
     {
@@ -432,14 +433,19 @@ fn save_export_file(
             .0
             .run_mobile_plugin::<android_downloads::SaveFileResponse>(
                 "saveFile",
-                serde_json::json!({ "fileName": file_name, "mime": mime, "contents": contents }),
+                serde_json::json!({
+                    "fileName": file_name,
+                    "mime": mime,
+                    "contents": contents,
+                    "contentsB64": contents_b64,
+                }),
             )
             .map(|r| r.path)
             .map_err(|e| e.to_string());
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (app, file_name, mime, contents);
+        let _ = (app, file_name, mime, contents, contents_b64);
         Err("save_export_file is Android-only".into())
     }
 }
