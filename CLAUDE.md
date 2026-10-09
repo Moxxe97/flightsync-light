@@ -94,8 +94,9 @@ Flow: branch → PR → merge → GitHub release `vX.Y.Z` on main. Release asset
 - **iOS**: `pnpm --filter flight-sync-light-desktop exec tauri ios build --export-method app-store-connect`
   builds and signs headless (manual signing, profile "FlightSync Light App Store", team 7NMM2V8489);
   IPA at `gen/apple/build/arm64/`, archive at `gen/apple/build/app_iOS.xcarchive`. Upload to TestFlight:
-  `open` the .xcarchive → Xcode Organizer → Distribute App → TestFlight (the `altool` route with ASC API
-  key `JP7Z85MA9M` returned 401 on 2026-10-09 — key/issuer pair unverified; fix on the App Store Connect
-  Integrations page before relying on it). An "according contracts" / "required contracts" upload error
+  `xcrun altool --upload-app -f <ipa> -t ios --apiKey JP7Z85MA9M --apiIssuer <issuer id>` (key verified
+  working 2026-10-09; the .p8 lives in `~/.appstoreconnect/private_keys/`, the issuer id is on the App
+  Store Connect → Integrations page — deliberately not committed to this public repo). Fallback: `open`
+  the .xcarchive → Xcode Organizer → Distribute App. An "according contracts" / "required contracts" error
   means a pending Apple Developer agreement — accept it at appstoreconnect.apple.com, then retry.
   TestFlight delivers updates automatically once Apple finishes processing.
