@@ -74,3 +74,28 @@ Auto-backup: 3-minute debounce after any data change, fires only when signed in.
 - `pnpm install` prints tailwindcss/vite peer-range warnings — expected, not a failure.
 - The desktop Tauri app uses a strict CSP in `tauri.conf.json` — when adding a new third-party domain, update `connect-src`/`script-src` accordingly.
 - The OAuth port 8765 is hard-coded in both `lib.rs` (the Rust listener) and in the Google Cloud OAuth client's authorized redirect URIs. Changing the port requires updating both places plus the Cloud Console.
+- Raw Tauri IPC (`window.__TAURI_INTERNALS__.invoke`) returns file contents as **bytes (ArrayBuffer on Tauri 2.x), never a string** — decode via `src/utils/decodeIpcText.js` (realm-safe; a realm-fragile `instanceof` check is what broke file import in ≤0.2.8). The `@tauri-apps/plugin-fs` JS wrappers decode for you; only raw-invoke call sites need this.
+
+## Releasing (validated shipping v0.2.9, 2026-10-09)
+
+Version lives in **three files** — bump all of them (`chore: bump version to X.Y.Z` commit):
+`apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, and
+`apps/desktop/src-tauri/gen/apple/app_iOS/Info.plist` (both `CFBundleShortVersionString` and `CFBundleVersion`).
+Flow: branch → PR → merge → GitHub release `vX.Y.Z` on main. Release assets are named
+`FlightSync-Light_X.Y.Z.apk` and `FlightSync.Light_X.Y.Z_universal.dmg` (docs/GUIDE.md points Android users at the Releases tab).
+
+- **macOS**: universal build per the Commands section. Tauri's DMG step (`bundle_dmg.sh`) needs
+  Finder-automation (TCC) permission and fails headless/from agents. Equivalent fallback: stage the
+  .app plus an `/Applications` symlink in a temp dir, then
+  `hdiutil create -volname "FlightSync Light" -srcfolder <stage> -format UDZO <name>.dmg`.
+- **Android**: `pnpm --filter flight-sync-light-desktop exec tauri android build --apk` → signed
+  universal APK at `gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`
+  (release keystore wired via `gen/android/keystore.properties`). Rename to the release-asset name.
+- **iOS**: `pnpm --filter flight-sync-light-desktop exec tauri ios build --export-method app-store-connect`
+  builds and signs headless (manual signing, profile "FlightSync Light App Store", team 7NMM2V8489);
+  IPA at `gen/apple/build/arm64/`, archive at `gen/apple/build/app_iOS.xcarchive`. Upload to TestFlight:
+  `open` the .xcarchive → Xcode Organizer → Distribute App → TestFlight (the `altool` route with ASC API
+  key `JP7Z85MA9M` returned 401 on 2026-10-09 — key/issuer pair unverified; fix on the App Store Connect
+  Integrations page before relying on it). An "according contracts" / "required contracts" upload error
+  means a pending Apple Developer agreement — accept it at appstoreconnect.apple.com, then retry.
+  TestFlight delivers updates automatically once Apple finishes processing.
