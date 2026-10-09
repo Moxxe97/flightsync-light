@@ -92,6 +92,7 @@ Flow: branch → PR → merge → GitHub release `vX.Y.Z` on main. Release asset
   universal APK at `gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`
   (release keystore wired via `gen/android/keystore.properties`). Rename to the release-asset name.
 - **iOS**: `pnpm --filter flight-sync-light-desktop exec tauri ios build --export-method app-store-connect`
+  (needs rustup's `llvm-tools` component and the repo's `.cargo/config.toml` env + swift-rs pin — see Cargo.toml — until swift-rs releases the Xcode 27 @_cdecl fix)
   builds and signs headless (manual signing, profile "FlightSync Light App Store", team 7NMM2V8489);
   IPA at `gen/apple/build/arm64/`, archive at `gen/apple/build/app_iOS.xcarchive`. Upload to TestFlight:
   `xcrun altool --upload-app -f <ipa> -t ios --apiKey JP7Z85MA9M --apiIssuer <issuer id>` (key verified

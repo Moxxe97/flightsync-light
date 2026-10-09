@@ -1,0 +1,7 @@
+# Xcode 27 / swift-rs#80: the application names the ONE Swift package archive
+# that exports the SwiftRs runtime shim symbols (retain_object, release_object,
+# string_from_bytes). Set here instead of the shell because the Tauri CLI →
+# xcodebuild → xcode-script chain does not forward ad-hoc environment variables
+# to cargo. Remove together with the [patch.crates-io] swift-rs pin.
+[env]
+SWIFT_RS_RUNTIME_ARCHIVE = "Tauri"
