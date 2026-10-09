@@ -16,6 +16,8 @@ class SaveFileArgs {
     var fileName: String? = null
     var mime: String? = null
     var contents: String? = null
+    // Base64 alternative for binary exports (ZIP). When set, `contents` is ignored.
+    var contentsB64: String? = null
 }
 
 // Writes an exported text file (CSV / ICS / JSON) into the device's public
@@ -31,9 +33,15 @@ class DownloadsPlugin(private val activity: Activity) : Plugin(activity) {
     fun saveFile(invoke: Invoke) {
         val args = invoke.parseArgs(SaveFileArgs::class.java)
         val fileName = args.fileName
-        val contents = args.contents
-        if (fileName.isNullOrEmpty() || contents == null) {
-            invoke.reject("fileName and contents are required")
+        val bytes: ByteArray? = when {
+            args.contentsB64 != null -> try {
+                android.util.Base64.decode(args.contentsB64, android.util.Base64.DEFAULT)
+            } catch (e: IllegalArgumentException) { null }
+            args.contents != null -> args.contents!!.toByteArray(Charsets.UTF_8)
+            else -> null
+        }
+        if (fileName.isNullOrEmpty() || bytes == null) {
+            invoke.reject("fileName and contents (or valid contentsB64) are required")
             return
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -52,7 +60,7 @@ class DownloadsPlugin(private val activity: Activity) : Plugin(activity) {
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 ?: throw IllegalStateException("MediaStore insert failed")
             resolver.openOutputStream(uri).use { out ->
-                out?.write(contents.toByteArray(Charsets.UTF_8))
+                out?.write(bytes)
                     ?: throw IllegalStateException("openOutputStream failed")
             }
             values.clear()

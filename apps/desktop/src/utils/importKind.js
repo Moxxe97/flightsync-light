@@ -12,7 +12,7 @@ export function importKind(filename, text) {
   if (ext === 'json' || ext === 'csv' || ext === 'tsv') return ext;
   if (ext) return null; // a real but unsupported extension stays rejected
 
-  const head = String(text || '').replace(/^﻿/, '').trimStart();
+  const head = String(text || '').replace(/^\uFEFF/, '').trimStart();
   if (head.startsWith('{') || head.startsWith('[')) return 'json';
   const firstLine = head.split('\n', 1)[0] || '';
   if (firstLine.includes('\t')) return 'tsv';
