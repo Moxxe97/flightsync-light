@@ -18,6 +18,7 @@ import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives } from
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
 import { parseBackupJson, sanitizeStoredRows, isValidFlight } from './utils/importValidation';
 import { decodeIpcText } from './utils/decodeIpcText';
+import { importKind } from './utils/importKind';
 import { buildFlightsCsv, looksLikeFlightRow } from './utils/exportCsv';
 import { saveExportFile } from './utils/saveExportFile';
 import Icons from './components/Icons';
@@ -765,7 +766,10 @@ export default function FlightSyncSystem() {
   };
 
   const processImportText = (text, filename) => {
-    const ext = filename.split(".").pop().toLowerCase();
+    // Android's file picker hands back a content:// URI with no extension —
+    // importKind falls back to sniffing the content (every mobile import
+    // used to bounce with "format not supported").
+    const ext = importKind(filename, text);
 
     // ─── JSON Import ───
     {
@@ -855,7 +859,7 @@ export default function FlightSyncSystem() {
       }
       // ─── Unsupported ───
       else {
-        notify(`.${ext} format not supported. Use JSON or CSV.`, "error");
+        notify("Unrecognized file — use a JSON backup or a CSV/TSV export.", "error");
       }
     }
   };
