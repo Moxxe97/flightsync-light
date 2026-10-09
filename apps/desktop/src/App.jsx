@@ -17,6 +17,7 @@ import { getAllOFPFlightIds, getAllBoardingPassInfo, getArchiveYear, getOFP } fr
 import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives } from './utils/archiveStore';
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
 import { parseBackupJson, sanitizeStoredRows, isValidFlight } from './utils/importValidation';
+import { decodeIpcText } from './utils/decodeIpcText';
 import { buildFlightsCsv, looksLikeFlightRow } from './utils/exportCsv';
 import { saveExportFile } from './utils/saveExportFile';
 import Icons from './components/Icons';
@@ -741,15 +742,9 @@ export default function FlightSyncSystem() {
           },
         });
         if (!filePath) return;
-        let text = await invoke('plugin:fs|read_text_file', { path: filePath });
-        // Tauri v2.x fs plugin may return raw bytes (number[]) instead of a string for read_text_file.
-        // Fall back to read_file and decode as UTF-8 if we didn't get a usable string.
-        if (typeof text !== 'string' || text.length === 0) {
-          const bytes = await invoke('plugin:fs|read_file', { path: filePath });
-          if (bytes && (Array.isArray(bytes) || bytes instanceof Uint8Array)) {
-            text = new TextDecoder('utf-8').decode(new Uint8Array(bytes));
-          }
-        }
+        // Raw IPC returns bytes (ArrayBuffer on Tauri 2.x), never a string —
+        // decodeIpcText mirrors the @tauri-apps/plugin-fs wrapper's decode.
+        const text = decodeIpcText(await invoke('plugin:fs|read_text_file', { path: filePath }));
         const filename = String(filePath).split('/').pop();
         processImportText(text, filename);
       } catch (err) {
