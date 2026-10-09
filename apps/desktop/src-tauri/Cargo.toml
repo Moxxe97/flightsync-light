@@ -42,3 +42,12 @@ lto = true          # cross-crate inlining + dead-code elimination
 codegen-units = 1   # better optimization (slower build)
 opt-level = "s"     # optimize for size
 panic = "abort"     # no unwind tables
+
+# Xcode 27 (Swift 6.4): SwiftPM's new build system internalizes non-public
+# @_cdecl exports in release static libs, breaking the Rust-side link
+# (tauri-apps/tauri#16130). swift-rs 1.0.8 re-globalizes each package's own
+# exports (needs rustup's llvm-tools), but the SwiftRs runtime shim symbols
+# need Brendonovich/swift-rs#80, unreleased — pinned here by SHA. Build with
+# SWIFT_RS_RUNTIME_ARCHIVE=Tauri. Drop this patch when swift-rs > 1.0.8 ships.
+[patch.crates-io]
+swift-rs = { git = "https://github.com/alchaplinsky/swift-rs", rev = "aaf38d45ab3a4b10a5af3a3dbc64424e998fae8c" }
