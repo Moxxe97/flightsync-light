@@ -9,6 +9,7 @@ import { estimateRoute } from '@flightsync/core/geo';
 import ReconciliationModal from './ReconciliationModal';
 import { findExistingFlight } from '@flightsync/core/parsing/merge-flights';
 import { flightsIncludingArchived } from '../utils/archiveView';
+import { toIsoDate } from '../utils/importValidation';
 
 // ─── PDF Trimming ─────────────────────────────────────────────
 // Extracts pages 0..cutPageIndex (inclusive) into a new PDF.
@@ -308,6 +309,13 @@ export default function PdfDropZone({ onImport, notify, storedFlights = [], arch
 
   // ─── Flight field update ──────────────────────────────────
   const updateFlight = (idx, field, raw) => {
+    // Only a real date gets in: one flight with "June 28" as its date later made
+    // the whole backup unrestorable. One-digit parts are padded (2026-6-9).
+    if (field === 'date') {
+      const iso = toIsoDate(raw);
+      if (!iso) { notify(`"${raw}" is not a date — type it as YYYY-MM-DD.`, 'error'); return; }
+      raw = iso;
+    }
     setFlights(prev => prev.map((f, i) => {
       if (i !== idx) return f;
       const updated = { ...f, [field]: field === 'totalTime' || field === 'canadianTime' || field === 'distance' || field === 'canadianDistance' ? parseFloat(raw) || 0 : raw };

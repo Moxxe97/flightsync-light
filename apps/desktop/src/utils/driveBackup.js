@@ -18,6 +18,16 @@ const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3/files';
 export const BACKUP_FOLDER = 'FlightSync Light';
 export const BACKUP_FILENAME = 'flightsync-light-backup.json';
+
+// One Drive backup file per device. Every device used to PATCH the same
+// BACKUP_FILENAME, so the last device to change anything replaced the other
+// devices' data. Each device now writes only its own file; the old shared file
+// is left in place (never deleted) and still offered by listBackups.
+export function backupFileName(deviceId) {
+  const safe = String(deviceId || '').replace(/[^A-Za-z0-9-]/g, '');
+  return safe ? `flightsync-light-backup-${safe}.json` : BACKUP_FILENAME;
+}
+const BACKUP_FILE_RE = /^flightsync-light-backup(?:-[A-Za-z0-9-]+)?\.json$/;
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 // M6b: a corrupted/hostile Drive file (or a botched PATCH) shouldn't let
@@ -76,8 +86,8 @@ async function ensureFolder(token, name, parentId = null) {
   return created.id;
 }
 
-async function uploadFile(token, { name, parentId, blob, mimeType }) {
-  const metadata = { name, mimeType, parents: [parentId] };
+async function uploadFile(token, { name, parentId, blob, mimeType, appProperties }) {
+  const metadata = { name, mimeType, parents: [parentId], ...(appProperties ? { appProperties } : {}) };
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', blob);
@@ -97,7 +107,7 @@ async function listFiles(token, parentId) {
   return files;
 }
 
-export function buildBackupPayload({ flights, residence, settings }) {
+export function buildBackupPayload({ flights, residence, settings, archives = [] }) {
   // backupFolder is a machine-specific absolute path (contains the macOS
   // username) — never serialize it into a backup that may leave this device.
   const { backupFolder: _machineLocal, ...safeSettings } = settings || {};
@@ -107,6 +117,24 @@ export function buildBackupPayload({ flights, residence, settings }) {
     flights,
     residence,
     settings: safeSettings,
+    // Archived years (the boot-time auto-archive moves every past year out of
+    // `flights`/`residence`): without them a backup made after New Year held
+    // only the current year. The manifest is rebuilt on restore.
+    archives: (archives || []).map((a) => ({ year: a.year, flights: a.flights || [], residence: a.residence || [] })),
+  };
+}
+
+// Labels stored on the Drive file (appProperties, each key+value ≤ 124 bytes)
+// so a restore can list every device's backup without downloading them.
+function backupLabels(payload, device) {
+  if (!device?.id) return undefined;
+  return {
+    fslDevice: String(device.id).slice(0, 40),
+    fslPlatform: String(device.platform || 'unknown').slice(0, 20),
+    fslFlights: String(payload.flights?.length || 0),
+    fslDays: String(payload.residence?.length || 0),
+    fslArchived: String(payload.archives.reduce((n, a) => n + a.flights.length, 0)),
+    fslExportedAt: payload.exportedAt,
   };
 }
 
@@ -153,36 +181,68 @@ async function backupBlobs(token, folderId) {
   }
 }
 
-export async function runBackup({ flights, residence, settings, includeBlobs = false }) {
+// device: { id, platform } — selects this device's own file (backupFileName).
+export async function runBackup({ flights, residence, settings, archives = [], device, includeBlobs = false }) {
   const token = await requireToken();
   const folderId = await ensureFolder(token, BACKUP_FOLDER);
 
-  const payload = buildBackupPayload({ flights, residence, settings });
+  const payload = buildBackupPayload({ flights, residence, settings, archives });
+  const appProperties = backupLabels(payload, device);
+  const name = backupFileName(device?.id);
   const jsonBlob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const existingId = await findByName(token, BACKUP_FILENAME, { parentId: folderId });
+  const existingId = await findByName(token, name, { parentId: folderId });
   if (existingId) {
-    await driveFetch(token, `${DRIVE_UPLOAD_API}/${existingId}?uploadType=media`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: jsonBlob,
-    });
+    // Multipart update: content and labels change in one request.
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(appProperties ? { appProperties } : {})], { type: 'application/json' }));
+    form.append('file', jsonBlob);
+    await driveFetch(token, `${DRIVE_UPLOAD_API}/${existingId}?uploadType=multipart`, { method: 'PATCH', body: form });
   } else {
-    await uploadFile(token, {
-      name: BACKUP_FILENAME, parentId: folderId,
-      mimeType: 'application/json', blob: jsonBlob,
-    });
+    await uploadFile(token, { name, parentId: folderId, mimeType: 'application/json', blob: jsonBlob, appProperties });
   }
 
   if (includeBlobs) await backupBlobs(token, folderId);
 }
 
-// Returns { fileId } when a backup exists on the signed-in account, else null.
-export async function findBackup() {
+// Every backup JSON on the signed-in account (one per device, plus the old
+// shared file if present), newest first:
+//   [{ fileId, name, deviceId, platform, flights, days, archivedFlights, exportedAt, legacy }]
+// Counts come from the file's labels; the old shared file has none (legacy).
+export async function listBackups() {
   const token = await requireToken();
   const folderId = await findByName(token, BACKUP_FOLDER, { mimeType: FOLDER_MIME });
-  if (!folderId) return null;
-  const fileId = await findByName(token, BACKUP_FILENAME, { parentId: folderId });
-  return fileId ? { fileId } : null;
+  if (!folderId) return [];
+  // Every non-folder file in the backup folder; names are matched below
+  // (BACKUP_FILE_RE) rather than with Drive's prefix-only `name contains`.
+  const q = `'${folderId}' in parents and trashed=false and mimeType != '${FOLDER_MIME}'`;
+  const data = await driveFetch(
+    token,
+    `${DRIVE_API}?q=${encodeURIComponent(q)}&fields=${encodeURIComponent('files(id,name,modifiedTime,appProperties)')}&pageSize=100&spaces=drive`,
+  );
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  return (data.files || [])
+    .filter((f) => BACKUP_FILE_RE.test(f.name || ''))
+    .map((f) => {
+      const p = f.appProperties || {};
+      return {
+        fileId: f.id,
+        name: f.name,
+        deviceId: p.fslDevice || null,
+        platform: p.fslPlatform || null,
+        flights: num(p.fslFlights),
+        days: num(p.fslDays),
+        archivedFlights: num(p.fslArchived),
+        exportedAt: p.fslExportedAt || f.modifiedTime || null,
+        legacy: f.name === BACKUP_FILENAME,
+      };
+    })
+    .sort((a, b) => String(b.exportedAt || '').localeCompare(String(a.exportedAt || '')));
+}
+
+// Returns { fileId } of the newest backup on the account, else null.
+export async function findBackup() {
+  const [newest] = await listBackups();
+  return newest ? { fileId: newest.fileId } : null;
 }
 
 function tooLargeError(bytes) {

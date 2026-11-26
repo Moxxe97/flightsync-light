@@ -1,6 +1,6 @@
 // Integration test for the proactive Drive restore offer in App.jsx (Task 10).
 // Behaviour under test:
-//   - signed in + empty local store + findBackup resolves { fileId }
+//   - signed in + empty local store + listBackups resolves [{ fileId, … }]
 //     -> the "Backup found on Google Drive" ConfirmModal appears
 //   - confirming "Restore" -> restoreFromDrive runs: downloadBackup(fileId)
 //     is called, the parsed snapshot replaces local state.
@@ -31,7 +31,7 @@ vi.mock('../utils/cloudAuth', () => ({
 }));
 
 // ─── The Drive seam we assert on ───
-const findBackupMock = vi.fn(async () => ({ fileId: 'BACKUP_FILE_ID' }));
+const listBackupsMock = vi.fn(async () => [{ fileId: 'BACKUP_FILE_ID', deviceId: 'DEV-OTHER', platform: 'desktop', flights: 1, days: 0, archivedFlights: 0, exportedAt: '2026-06-11T00:00:00.000Z', legacy: false }]);
 const BACKUP_SNAPSHOT = JSON.stringify({
   schemaVersion: 1,
   exportedAt: '2026-06-11T00:00:00.000Z',
@@ -50,7 +50,7 @@ vi.mock('../utils/driveBackup', async () => {
   return {
     ...actual,
     runBackup: vi.fn(async () => {}),
-    findBackup: (...a) => findBackupMock(...a),
+    listBackups: (...a) => listBackupsMock(...a),
     downloadBackup: (...a) => downloadBackupMock(...a),
     restoreBlobs: (...a) => restoreBlobsMock(...a),
   };
@@ -87,7 +87,7 @@ async function renderApp() {
 describe('App proactive Drive restore offer', () => {
   beforeEach(() => {
     authProfile = { uid: 'test-user', email: 'pilote@example.com' };
-    findBackupMock.mockClear();
+    listBackupsMock.mockClear();
     downloadBackupMock.mockClear();
     restoreBlobsMock.mockClear();
     window.localStorage.clear();
@@ -97,10 +97,10 @@ describe('App proactive Drive restore offer', () => {
   it('signed in + empty + backup found: offers, and confirming restores via downloadBackup(fileId)', async () => {
     await renderApp();
 
-    // The offer modal appears (findBackup resolved { fileId }).
+    // The offer modal appears (listBackups found a backup).
     const modalTitle = await screen.findByText('Backup found on Google Drive');
     expect(modalTitle).toBeTruthy();
-    expect(findBackupMock).toHaveBeenCalled();
+    expect(listBackupsMock).toHaveBeenCalled();
 
     // Confirm "Restore" → restoreFromDrive path.
     await act(async () => {
@@ -152,6 +152,6 @@ describe('App proactive Drive restore offer', () => {
     authProfile = null;
     await renderApp();
     expect(screen.queryByText('Backup found on Google Drive')).toBeNull();
-    expect(findBackupMock).not.toHaveBeenCalled();
+    expect(listBackupsMock).not.toHaveBeenCalled();
   });
 });

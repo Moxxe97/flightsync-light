@@ -67,7 +67,7 @@ vi.mock('../utils/icsExport', () => ({
 }));
 vi.mock('../utils/driveBackup', () => ({
   runBackup: vi.fn(async () => {}),
-  findBackup: vi.fn(async () => null),
+  listBackups: vi.fn(async () => []),
   downloadBackup: vi.fn(async () => ''),
   restoreBlobs: vi.fn(async () => ({ ofps: 0, boardingPasses: 0 })),
 }));

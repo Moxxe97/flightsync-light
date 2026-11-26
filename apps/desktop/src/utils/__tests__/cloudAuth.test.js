@@ -80,4 +80,67 @@ describe('ensureAccessToken', () => {
     await expect(ensureAccessToken()).rejects.toThrow('reconnection required');
     expect(invokeMock).toHaveBeenCalledWith('delete_refresh_token');
   });
+
+  // A new phone restored from a backup (or a Mac whose Keychain item is gone)
+  // keeps the stored profile but has no refresh token: the app said "Signed in"
+  // while every backup failed with "Not signed in". Show the sign-in button.
+  it('clears a stale signed-in profile when the token store holds no token', async () => {
+    vi.doMock('@tauri-apps/api/core', () => ({
+      invoke: vi.fn(async (cmd) => (cmd === 'platform_name' ? 'android' : null)),
+    }));
+    vi.doMock('../../config', () => ({
+      GOOGLE_CLIENT_ID: 'test-client-id',
+      GOOGLE_CLIENT_SECRET: 'test-client-secret',
+      GOOGLE_ANDROID_CLIENT_ID: 'android-client-id',
+      GOOGLE_IOS_CLIENT_ID: '',
+    }));
+    localStorage.setItem('fsl-google-profile', JSON.stringify({ uid: 'u1', email: 'pilot@example.com' }));
+    const { ensureAccessToken, getProfile, onAuthChanged } = await import('../cloudAuth');
+    const seen = [];
+    onAuthChanged((p) => seen.push(p));
+    await expect(ensureAccessToken()).resolves.toBeNull();
+    expect(getProfile()).toBeNull();
+    expect(seen.at(-1)).toBeNull();
+  });
+
+  it('keeps the profile when reading the token store fails (an error is not "no token")', async () => {
+    vi.doMock('@tauri-apps/api/core', () => ({
+      invoke: vi.fn(async (cmd) => {
+        if (cmd === 'platform_name') return 'desktop';
+        throw new Error('User canceled the Keychain prompt');
+      }),
+    }));
+    vi.doMock('../../config', () => ({
+      GOOGLE_CLIENT_ID: 'test-client-id', GOOGLE_CLIENT_SECRET: 's', GOOGLE_ANDROID_CLIENT_ID: '', GOOGLE_IOS_CLIENT_ID: '',
+    }));
+    localStorage.setItem('fsl-google-profile', JSON.stringify({ uid: 'u1', email: 'pilot@example.com' }));
+    const { ensureAccessToken, getProfile } = await import('../cloudAuth');
+    await expect(ensureAccessToken()).rejects.toThrow(/Keychain/);
+    expect(getProfile()).toEqual({ uid: 'u1', email: 'pilot@example.com' });
+  });
+});
+
+describe('signOut', () => {
+  beforeEach(() => { vi.resetModules(); });
+
+  // Android: an encrypted token file restored onto a new phone cannot be
+  // decrypted, so load/delete threw and Sign out failed — the pilot could
+  // neither sign out nor back in. Signing out locally must always complete.
+  it('signs out locally even when the token store cannot be read', async () => {
+    const invokeMock = vi.fn(async (cmd) => {
+      if (cmd === 'platform_name') return 'android';
+      if (cmd === 'load_refresh_token') throw new Error('javax.crypto.AEADBadTagException');
+      return null;
+    });
+    vi.doMock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
+    vi.doMock('../../config', () => ({
+      GOOGLE_CLIENT_ID: 'c', GOOGLE_CLIENT_SECRET: 's', GOOGLE_ANDROID_CLIENT_ID: 'a', GOOGLE_IOS_CLIENT_ID: '',
+    }));
+    globalThis.fetch = vi.fn();
+    localStorage.setItem('fsl-google-profile', JSON.stringify({ uid: 'u1', email: 'pilot@example.com' }));
+    const { signOut, getProfile } = await import('../cloudAuth');
+    await expect(signOut()).resolves.toBeUndefined();
+    expect(getProfile()).toBeNull();
+    expect(invokeMock).toHaveBeenCalledWith('delete_refresh_token');
+  });
 });

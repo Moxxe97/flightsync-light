@@ -2,6 +2,7 @@
 // classification (saved immediately), boarding passes (IndexedDB), notes
 // (saved when the panel closes). Replaces DayChooser + ResidenceEditModal.
 import { useEffect, useRef, useState } from 'react';
+import { MAX_NOTES_LEN } from '../utils/importValidation';
 import {
   getBoardingPassesForDate,
   saveBoardingPass,
@@ -170,6 +171,7 @@ export default function DayPanel({
           value={notes}
           readOnly={readOnly}
           onChange={(e) => setNotes(e.target.value)}
+          maxLength={MAX_NOTES_LEN /* longer notes used to make the whole backup unrestorable */}
           placeholder={readOnly ? '' : 'Hotel, pairing, context…'}
           rows={3}
           style={{

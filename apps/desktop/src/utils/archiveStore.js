@@ -104,3 +104,17 @@ export async function migrateLocalStorageArchives({ ofpFlightIds = [], bpDates =
   }
   return migrated;
 }
+
+// Merge archived years restored from a backup into the store and rebuild their
+// manifests (ofpFlightIds/bpDates: app-wide lists, read AFTER the PDFs were
+// restored so the manifests list them). Additive on purpose, like every archive
+// write: existing entries win and a restore never deletes an archived year.
+export async function restoreArchiveYears(archives, { ofpFlightIds = [], bpDates = [] } = {}) {
+  let years = 0;
+  for (const a of archives || []) {
+    if (!a?.year) continue;
+    await saveYearToArchive(a.year, { flights: a.flights || [], residence: a.residence || [], ofpFlightIds, bpDates });
+    years++;
+  }
+  return years;
+}

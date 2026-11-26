@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import './App.css';
 import { exportICS } from './utils/icsExport';
-import { runBackup, findBackup, downloadBackup, restoreBlobs, persistRestoreData, BACKUP_FILENAME } from './utils/driveBackup';
+import { runBackup, listBackups, downloadBackup, restoreBlobs, persistRestoreData, BACKUP_FILENAME } from './utils/driveBackup';
+import { describeBackup, describeSkipped } from './utils/backupLabel';
 import { runFolderBackup, restoreFolderBlobs, ensureFolderAccess } from './utils/folderBackup';
-import { isMobilePlatform } from './utils/platform';
+import { isMobilePlatform, getPlatform } from './utils/platform';
 import { mobileBackupRoot } from './utils/mobileBackupRoot';
 import { tallyResidence } from './utils/residence';
 import { selectDisplayData, archiveYearList, adjacentYear } from './utils/archiveView';
@@ -14,7 +15,7 @@ import BoardingPassModal from './components/BoardingPassModal';
 const OFPModal = lazy(() => import('./components/OFPModal'));
 import DayPanel from './components/DayPanel';
 import { getAllOFPFlightIds, getAllBoardingPassInfo, getArchiveYear, getOFP } from '@flightsync/core/idb';
-import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives } from './utils/archiveStore';
+import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives, restoreArchiveYears } from './utils/archiveStore';
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
 import { parseBackupJson, sanitizeStoredRows, isValidFlight } from './utils/importValidation';
 import { decodeIpcText } from './utils/decodeIpcText';
@@ -114,11 +115,15 @@ export default function FlightSyncSystem() {
   // platform (Android/iOS vs desktop), computed once at mount since it can't
   // change at runtime. Drives platform-aware local-backup copy in BackupTab.
   const [isMobilePlatformDevice, setIsMobilePlatformDevice] = useState(false);
+  const [platformName, setPlatformName] = useState('unknown'); // 'desktop' | 'ios' | 'android' — labels this device's Drive backup
   useEffect(() => {
     // Falls back to `false` (desktop copy) outside a real Tauri webview —
     // e.g. tests/jsdom, where window.__TAURI_INTERNALS__ is undefined and
     // the underlying invoke() throws instead of rejecting cleanly.
-    isMobilePlatform().then(setIsMobilePlatformDevice).catch(() => setIsMobilePlatformDevice(false));
+    getPlatform().then((p) => {
+      setPlatformName(p);
+      setIsMobilePlatformDevice(p === 'android' || p === 'ios');
+    }).catch(() => setIsMobilePlatformDevice(false));
   }, []);
   const backupTimerRef = useRef(null);
   const backupStatusResetRef = useRef(null);
@@ -141,7 +146,9 @@ export default function FlightSyncSystem() {
   const [expandedArchiveYear, setExpandedArchiveYear] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, flightNumber, date }
   const [signOutConfirm, setSignOutConfirm] = useState(false);
-  const [restoreOffer, setRestoreOffer] = useState(null); // { fileId } | null
+  const [restoreOffer, setRestoreOffer] = useState(null); // { backups: listBackups() rows } | null
+  const [restoreChoice, setRestoreChoice] = useState(null); // fileId picked in the restore dialog
+  const [restoreReport, setRestoreReport] = useState(null); // rows a restore left out, shown until dismissed
   const [clearAllConfirm, setClearAllConfirm] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -164,6 +171,22 @@ export default function FlightSyncSystem() {
   // ─── ARCHIVE ──────────────────────────────────────────
   const loadArchives = useCallback(async () => {
     setArchiveYears(await listArchiveYears());
+  }, []);
+
+  // Archived years carried by a backup → the archive store (additive). Run
+  // after the PDFs were restored, so the manifests list the restored OFPs.
+  const restoreArchives = useCallback(async (archives) => {
+    if (!archives?.length) return 0;
+    const ofpIds = [...await getAllOFPFlightIds()];
+    const bpDates = (await getAllBoardingPassInfo()).map((b) => b.date);
+    const years = await restoreArchiveYears(archives, { ofpFlightIds: ofpIds, bpDates });
+    await loadArchives();
+    return years;
+  }, [loadArchives]);
+
+  const offerRestore = useCallback((backups) => {
+    setRestoreChoice(backups[0]?.fileId ?? null); // newest first
+    setRestoreOffer({ backups });
   }, []);
 
   useEffect(() => {
@@ -394,17 +417,42 @@ export default function FlightSyncSystem() {
   // BackupTab). Always includeBlobs:true — driveBackup skips already-uploaded
   // PDFs by name, so the steady-state cost is one cheap JSON PATCH.
   const runDriveBackup = useCallback(async ({ manual = false } = {}) => {
-    if (!authUser) return;
-    // Never overwrite a remote backup with empty local state (fresh install /
-    // declined restore). Manual and auto paths both route through here, so this
-    // is the single source of truth for the empty guard.
-    if (flights.length === 0 && residence.length === 0) {
+    if (!authUser || !deviceId) return; // the device id names this device's own Drive file
+    const fail = (detail) => {
+      setBackupState((s) => ({
+        ...s,
+        status: 'error',
+        log: [{ at: now(), action: 'backup_error', detail }, ...s.log].slice(0, 50),
+      }));
+      if (manual) notify(`Backup failed: ${detail}`, 'error');
+      // Auto-backup failures stay quiet; the next data change reschedules a retry.
+    };
+    // Archived years go into every backup — read from the store itself, never a
+    // possibly stale React copy. If they cannot be read, do not write a
+    // snapshot that silently lacks them.
+    let archives;
+    try {
+      archives = await listArchiveYears();
+    } catch (err) {
+      fail(`archived years unreadable (${err.message})`);
+      return;
+    }
+    // Never write an empty snapshot (fresh install / declined restore). Manual
+    // and auto paths both route through here, so this is the single source of
+    // truth for the empty guard. Archived years count: in January the live
+    // lists are empty and the whole past year is in the archive.
+    const archivedRows = archives.reduce((n, a) => n + a.flights.length + a.residence.length, 0);
+    if (flights.length === 0 && residence.length === 0 && archivedRows === 0) {
       if (manual) notify('No data to back up', 'info');
       return;
     }
     setBackupState((s) => ({ ...s, status: 'syncing' }));
     try {
-      await runBackup({ flights, residence, settings, includeBlobs: true });
+      await runBackup({
+        flights, residence, settings, archives,
+        device: { id: deviceId, platform: platformName },
+        includeBlobs: true,
+      });
       const at = now();
       setBackupState((s) => ({
         status: 'success',
@@ -421,15 +469,9 @@ export default function FlightSyncSystem() {
         setBackupState((p) => (p.status === 'success' ? { ...p, status: 'idle' } : p));
       }, 3000);
     } catch (err) {
-      setBackupState((s) => ({
-        ...s,
-        status: 'error',
-        log: [{ at: now(), action: 'backup_error', detail: err.message }, ...s.log].slice(0, 50),
-      }));
-      if (manual) notify(`Backup failed: ${err.message}`, 'error');
-      // Auto-backup failures stay quiet; the next data change reschedules a retry.
+      fail(err.message);
     }
-  }, [authUser, flights, residence, settings, notify]);
+  }, [authUser, deviceId, platformName, flights, residence, settings, notify]);
 
   // ─── DRIVE RESTORE ───────────────────────────────────
   // Restore REPLACES local data with the Drive snapshot. parseBackupJson throws
@@ -456,7 +498,8 @@ export default function FlightSyncSystem() {
     const text = await downloadBackup(fileId);
     const { preview, error } = parseBackupJson(text);
     if (error) throw new Error(error);
-    const incoming = preview.data.data; // { flights, residence, settings? }
+    const incoming = preview.data.data; // { flights, residence, settings?, archives }
+    const archives = incoming.archives || [];
     // A backup made before 0.1.4 can carry raw ICAO codes — normalize on the
     // way in so a restore never reinstates un-normalized rows for the session.
     const nextFlights = normalizeFlightAirports(
@@ -495,7 +538,9 @@ export default function FlightSyncSystem() {
     // Re-download the PDF mirror (OFPs / boarding passes). A blob failure here
     // doesn't undo the JSON restore — the flights/residence are already in place.
     try {
-      const { ofps, boardingPasses, skipped } = await restoreBlobs(nextFlights);
+      // Flight plans of archived flights too: restoreBlobs only restores an OFP
+      // whose flight is in the list it is given.
+      const { ofps, boardingPasses, skipped } = await restoreBlobs([...nextFlights, ...archives.flatMap((a) => a.flights)]);
       const skippedNote = skipped ? ` · ${skipped} skipped (invalid format)` : '';
       if (ofps || boardingPasses || skipped) {
         // 'error' when everything that came off Drive was rejected by the M8
@@ -508,20 +553,34 @@ export default function FlightSyncSystem() {
     } catch (err) {
       notify(`Data restored, but PDFs incomplete: ${err.message}`, 'error');
     }
-  }, [settings, notify, refreshOFPIds, refreshBoardingPassDates]);
+
+    try {
+      const years = await restoreArchives(archives);
+      if (years) notify(`${years} archived year(s) restored`, 'success');
+    } catch (err) {
+      notify(`Data restored, but archived years were not: ${err.message}`, 'error');
+    }
+
+    // Rows the parser left out stay on screen until dismissed (the backup on
+    // Drive itself is unchanged).
+    if (preview.skipped.length) setRestoreReport(preview.skipped);
+  }, [settings, notify, refreshOFPIds, refreshBoardingPassDates, restoreArchives]);
 
   // Proactive restore offer (new-Mac scenario): signed in with an empty local
   // store + a backup found on the account → offer to restore once per session.
+  // "Empty" includes the archive (read once the ls→idb migration has loaded
+  // it): in January the live lists are empty but last year is archived, and
+  // that device must not be offered a snapshot over its data.
   useEffect(() => {
-    if (!authUser || isLoading) return undefined;
+    if (!authUser || isLoading || !migrationDone) return undefined;
     if (restoreOfferDismissedRef.current) return undefined;
-    if (flights.length !== 0 || residence.length !== 0) return undefined;
+    if (flights.length !== 0 || residence.length !== 0 || archiveYears.length !== 0) return undefined;
     let cancelled = false;
-    findBackup()
-      .then((found) => { if (!cancelled && found) setRestoreOffer(found); })
+    listBackups()
+      .then((backups) => { if (!cancelled && backups.length) offerRestore(backups); })
       .catch(() => { /* offline / not found — stay silent */ });
     return () => { cancelled = true; };
-  }, [authUser, isLoading, flights.length, residence.length]);
+  }, [authUser, isLoading, migrationDone, flights.length, residence.length, archiveYears.length, offerRestore]);
 
   // Manual "Back up" (header + Dashboard quick action): persist the local
   // snapshot, then push to Drive through the shared runner.
@@ -555,7 +614,7 @@ export default function FlightSyncSystem() {
     clearTimeout(backupTimerRef.current);
     backupTimerRef.current = setTimeout(() => { runDriveBackup({}); }, AUTO_BACKUP_DELAY_MS);
     return () => clearTimeout(backupTimerRef.current);
-  }, [flights, residence, settings, authUser, isLoading, runDriveBackup]);
+  }, [flights, residence, settings, archiveYears, authUser, isLoading, runDriveBackup]);
 
   // Clear the pending status-reset timeout on unmount (App never unmounts in
   // practice, but this keeps the timer from firing into a torn-down tree).
@@ -565,7 +624,8 @@ export default function FlightSyncSystem() {
   const runFolderBackupNow = useCallback(async () => {
     if (!settings.backupFolder) return;
     try {
-      await runFolderBackup({ folder: settings.backupFolder, flights, residence, settings });
+      const archives = await listArchiveYears(); // archived years travel with every backup
+      await runFolderBackup({ folder: settings.backupFolder, flights, residence, settings, archives });
       setFolderBackupStatus({ at: now(), error: null });
     } catch (err) {
       console.warn('[folder-backup] failed:', err);
@@ -580,7 +640,7 @@ export default function FlightSyncSystem() {
     clearTimeout(folderBackupTimerRef.current);
     folderBackupTimerRef.current = setTimeout(() => { runFolderBackupNow(); }, AUTO_BACKUP_DELAY_MS);
     return () => clearTimeout(folderBackupTimerRef.current);
-  }, [flights, residence, settings, isLoading, runFolderBackupNow]);
+  }, [flights, residence, settings, archiveYears, isLoading, runFolderBackupNow]);
 
   // ─── FOLDER PICKER ───────────────────────────────────
   const chooseBackupFolder = async () => {
@@ -650,6 +710,13 @@ export default function FlightSyncSystem() {
   const exportToJSON = async () => {
     // backupFolder is a machine-specific absolute path — never serialize it into an export file.
     const { backupFolder: _machineLocal, ...safeSettings } = settings;
+    let archives;
+    try {
+      archives = (await listArchiveYears()).map((a) => ({ year: a.year, flights: a.flights, residence: a.residence }));
+    } catch (err) {
+      notify("JSON export failed: archived years unreadable (" + (err?.message || err) + ")", "error");
+      return;
+    }
     const exportData = {
       version: SYNC_VERSION,
       exportDate: now(),
@@ -658,10 +725,12 @@ export default function FlightSyncSystem() {
         flights,
         residence,
         settings: { ...safeSettings, lastBackup: now() },
+        archives,
       },
       metadata: {
         totalFlights: flights.length,
         totalResidenceDays: residence.length,
+        archivedYears: archives.map((a) => a.year),
         dateRange: flights.length > 0 ? {
           from: flights.reduce((min, f) => f.date < min ? f.date : min, flights[0]?.date),
           to: flights.reduce((max, f) => f.date > max ? f.date : max, flights[0]?.date),
@@ -867,6 +936,7 @@ export default function FlightSyncSystem() {
   const executeImport = async (strategy) => {
     if (!importPreview) return;
     const incoming = importPreview.data.data;
+    const archives = incoming.archives || [];
     const timestamp = now();
 
     // A backup taken before 0.1.4 can carry raw ICAO codes — normalize on the
@@ -902,7 +972,8 @@ export default function FlightSyncSystem() {
     // If this restore came from a local folder, re-import the PDF mirror.
     if (importPreview._folderBlobs) {
       try {
-        const { ofps, boardingPasses } = await restoreFolderBlobs(importPreview._folderBlobs, finalFlights);
+        const { ofps, boardingPasses } = await restoreFolderBlobs(
+          importPreview._folderBlobs, [...finalFlights, ...archives.flatMap((a) => a.flights)]);
         if (ofps || boardingPasses) {
           await refreshBoardingPassDates();
           refreshOFPIds();
@@ -910,6 +981,17 @@ export default function FlightSyncSystem() {
         }
       } catch (err) {
         console.warn('[folder-restore-blobs] failed:', err);
+      }
+    }
+
+    // Archived years are always ADDED (merge or replace alike): a restore never
+    // deletes an archived year.
+    if (archives.length) {
+      try {
+        const years = await restoreArchives(archives);
+        notify(`${years} archived year(s) restored`, 'success');
+      } catch (err) {
+        notify(`Import complete, but archived years were not restored: ${err.message}`, 'error');
       }
     }
   };
@@ -1110,8 +1192,8 @@ export default function FlightSyncSystem() {
           onBackupNow={() => runDriveBackup({ manual: true })}
           onRestoreRequest={async () => {
             try {
-              const found = await findBackup();
-              if (found) setRestoreOffer(found);
+              const backups = await listBackups();
+              if (backups.length) offerRestore(backups);
               else notify('No backup found on this account', 'error');
             } catch (err) {
               notify(err.message, 'error');
@@ -1220,6 +1302,21 @@ export default function FlightSyncSystem() {
             <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>
               <span className="mono">{formatDate(importPreview.date)}</span> · Device: <span className="mono">{importPreview.device}</span>
             </div>
+            {importPreview.archivedYears > 0 && (
+              <div style={{ fontSize: 12, color: "#a0aec0", marginTop: 8 }}>
+                {`+ ${importPreview.archivedYears} archived year${importPreview.archivedYears === 1 ? '' : 's'} (${importPreview.archivedFlights} flight${importPreview.archivedFlights === 1 ? '' : 's'}) — added to this device's archive, never replaced.`}
+              </div>
+            )}
+            {importPreview.skipped?.length > 0 && (
+              <div style={{ fontSize: 12, color: "#f59e0b", marginTop: 8, overflowWrap: "anywhere" }}>
+                {describeSkipped(importPreview.skipped)}
+              </div>
+            )}
+            {importPreview.repaired > 0 && (
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>
+                {`${importPreview.repaired} row(s) repaired on the way in (date format, note length or hours stored as text).`}
+              </div>
+            )}
 
             <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #1e2a45" }}>
               <p style={{ fontSize: 13, color: "#a0aec0", marginBottom: 16 }}>Import strategy:</p>
@@ -1235,7 +1332,7 @@ export default function FlightSyncSystem() {
                 </button>
               </div>
               <p style={{ fontSize: 11, color: "#475569", marginTop: 12 }}>
-                Merge = adds new flights without touching existing ones. Replace = overwrites everything.
+                Merge = adds new flights without touching existing ones. Replace = overwrites this device's flights and days. Archived years are always added, never replaced.
               </p>
             </div>
           </div>
@@ -1483,15 +1580,46 @@ export default function FlightSyncSystem() {
       <ConfirmModal
         open={!!restoreOffer}
         title="Backup found on Google Drive"
-        message="Restoring will REPLACE this device's flights and residence days with the contents of the Google Drive backup. A snapshot of the current data is kept locally before the overwrite, but there is no one-click undo button yet."
+        message={restoreOffer && (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              Restoring will REPLACE this device&apos;s flights and residence days with the chosen backup; archived years in it are added, never replaced. A snapshot of the current data is kept locally before the overwrite, but there is no one-click undo button yet.
+            </div>
+            {/* One backup per device: pick which one to bring back (newest first). */}
+            <div role="radiogroup" aria-label="Backups on Google Drive" style={{ display: 'grid', gap: 8, textAlign: 'left' }}>
+              {restoreOffer.backups.map((b) => (
+                <label key={b.fileId} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer', color: '#e2e8f0' }}>
+                  <input
+                    type="radio"
+                    name="restore-choice"
+                    checked={restoreChoice === b.fileId}
+                    onChange={() => setRestoreChoice(b.fileId)}
+                    style={{ marginTop: 3 }}
+                  />
+                  <span>{describeBackup(b, deviceId)}</span>
+                </label>
+              ))}
+            </div>
+          </>
+        )}
         confirmLabel="Restore"
         cancelLabel="Later"
         onConfirm={() => {
-          const offer = restoreOffer;
+          const fileId = restoreChoice;
           setRestoreOffer(null);
-          if (offer) restoreFromDrive(offer.fileId).catch((err) => notify(`Restore failed: ${err.message}`, 'error'));
+          if (fileId) restoreFromDrive(fileId).catch((err) => notify(`Restore failed: ${err.message}`, 'error'));
         }}
         onCancel={() => { restoreOfferDismissedRef.current = true; setRestoreOffer(null); }}
+      />
+
+      <ConfirmModal
+        open={!!restoreReport}
+        title="Some rows could not be restored"
+        message={restoreReport && `${describeSkipped(restoreReport)} The backup on Google Drive is unchanged.`}
+        confirmLabel="OK"
+        cancelLabel={null}
+        onConfirm={() => setRestoreReport(null)}
+        onCancel={() => setRestoreReport(null)}
       />
 
       <ConfirmModal

@@ -87,11 +87,13 @@ async function isUnsafePath(path) {
   }
 }
 
-export async function runFolderBackup({ folder, flights, residence, settings }) {
+export async function runFolderBackup({ folder, flights, residence, settings, archives = [] }) {
   if (!folder) return { skipped: 'no-folder' };
   // Same guard as the Drive backup: never clobber a real backup with an
-  // empty state (fresh boot, failed load).
-  if ((flights?.length || 0) === 0 && (residence?.length || 0) === 0) {
+  // empty state (fresh boot, failed load). Archived years count as data: in
+  // January the live lists are empty and the whole past year is in the archive.
+  const archivedRows = (archives || []).reduce((n, a) => n + (a.flights?.length || 0) + (a.residence?.length || 0), 0);
+  if ((flights?.length || 0) === 0 && (residence?.length || 0) === 0 && archivedRows === 0) {
     return { skipped: 'empty' };
   }
   await ensureFolderAccess(folder);
@@ -101,7 +103,7 @@ export async function runFolderBackup({ folder, flights, residence, settings }) 
   if (await lstatSymlink(backupPath)) {
     throw new Error(`refusing to write backup: '${BACKUP_FILENAME}' is a symlink (possible tampering)`);
   }
-  const payload = buildBackupPayload({ flights, residence, settings });
+  const payload = buildBackupPayload({ flights, residence, settings, archives });
   await writeTextFile(backupPath, JSON.stringify(payload, null, 2));
 
   let ofps = 0;

@@ -32,7 +32,7 @@ vi.mock('../utils/cloudAuth', () => ({
 }));
 vi.mock('../utils/driveBackup', () => ({
   runBackup: vi.fn(async () => {}),
-  findBackup: vi.fn(async () => null),
+  listBackups: vi.fn(async () => []),
   downloadBackup: vi.fn(async () => ''),
   restoreBlobs: vi.fn(async () => ({ ofps: 0, boardingPasses: 0 })),
   BACKUP_FILENAME: 'flightsync-light-backup.json',

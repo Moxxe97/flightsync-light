@@ -269,7 +269,14 @@ export async function signInWithGoogle() {
 export async function ensureAccessToken() {
   if (_accessToken && Date.now() < _accessTokenExpiresAt) return _accessToken;
   const refreshToken = await invoke('load_refresh_token');
-  if (!refreshToken) return null;
+  if (!refreshToken) {
+    // A stored profile with no token behind it (a new phone restored from a
+    // backup, a Mac whose Keychain item is gone): the app said "Signed in"
+    // while every backup failed with "Not signed in". Show the sign-in button.
+    // A failed READ throws above and keeps the profile — that is not "no token".
+    if (getProfile()) setProfile(null);
+    return null;
+  }
   const params = await requireConfigForPlatform();
   try {
     const data = await tokenRequest({
@@ -291,15 +298,28 @@ export async function ensureAccessToken() {
   }
 }
 
+// Local sign-out always completes, even when the token store cannot be read
+// (Android: an encrypted token file restored onto a new phone cannot be
+// decrypted, and Sign out used to fail — the pilot could neither sign out nor
+// back in).
 export async function signOut() {
-  const refreshToken = await invoke('load_refresh_token');
+  let refreshToken = null;
+  try {
+    refreshToken = await invoke('load_refresh_token');
+  } catch (err) {
+    console.warn('[auth] token store unreadable, signing out locally:', err?.message || err);
+  }
   if (refreshToken) {
     // Best-effort revoke; local sign-out proceeds even offline.
     try {
       await fetch(`${REVOKE_URL}?token=${encodeURIComponent(refreshToken)}`, { method: 'POST' });
     } catch { /* offline — keychain delete below still signs us out locally */ }
   }
-  await invoke('delete_refresh_token');
+  try {
+    await invoke('delete_refresh_token');
+  } catch (err) {
+    console.warn('[auth] could not delete the stored token:', err?.message || err);
+  }
   _accessToken = null;
   _accessTokenExpiresAt = 0;
   setProfile(null);
