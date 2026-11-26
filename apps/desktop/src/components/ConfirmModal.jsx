@@ -8,7 +8,7 @@ export default function ConfirmModal({
   title,
   message,
   confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  cancelLabel = 'Cancel', // null → a single-button notice
   onConfirm,
   onCancel,
   danger = false,
@@ -39,13 +39,15 @@ export default function ConfirmModal({
           </div>
         )}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button
-            className="btn btn-secondary"
-            style={{ padding: '8px 20px', fontSize: 13 }}
-            onClick={onCancel}
-          >
-            {cancelLabel}
-          </button>
+          {cancelLabel && (
+            <button
+              className="btn btn-secondary"
+              style={{ padding: '8px 20px', fontSize: 13 }}
+              onClick={onCancel}
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button
             className={danger ? undefined : 'btn btn-primary'}
             style={

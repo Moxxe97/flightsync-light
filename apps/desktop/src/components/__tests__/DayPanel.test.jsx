@@ -10,6 +10,7 @@ vi.mock('@flightsync/core/idb', () => ({
 
 import * as idb from '@flightsync/core/idb';
 import DayPanel from '../DayPanel';
+import { MAX_NOTES_LEN } from '../../utils/importValidation';
 
 beforeEach(() => { vi.clearAllMocks(); cleanup(); });
 
@@ -151,5 +152,12 @@ describe('DayPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Close/i }));
     expect(onSaveDay).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // A note longer than a backup accepts used to make the whole backup unrestorable.
+  it('caps the note at the length a backup restores', async () => {
+    render(<DayPanel {...baseProps} />);
+    await waitFor(() => expect(idb.getBoardingPassesForDate).toHaveBeenCalled());
+    expect(screen.getByRole('textbox').getAttribute('maxlength')).toBe(String(MAX_NOTES_LEN));
   });
 });

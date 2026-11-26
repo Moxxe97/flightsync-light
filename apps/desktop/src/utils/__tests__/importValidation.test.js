@@ -20,12 +20,17 @@ describe('parseBackupJson', () => {
     expect(error).toMatch(/invalid/i);
   });
 
-  it('rejects a backup with junk flight rows', () => {
+  // Since 2026-11-26 a junk row is left out and listed instead of making the
+  // whole backup unrestorable; it never reaches the restored data.
+  it('leaves junk flight rows out of a backup and lists them', () => {
     const text = JSON.stringify({ version: 1, data: { flights: [flight, 'junk'], residence: [] } });
-    expect(parseBackupJson(text).error).toMatch(/invalid/i);
+    const { preview, error } = parseBackupJson(text);
+    expect(error).toBeUndefined();
+    expect(preview.data.data.flights).toEqual([flight]);
+    expect(preview.skipped).toHaveLength(1);
   });
 
-  it('rejects a backup with junk residence rows', () => {
+  it('rejects a backup whose only row is junk (nothing readable)', () => {
     const text = JSON.stringify({ version: 1, data: { flights: [], residence: [{ notADate: 1 }] } });
     expect(parseBackupJson(text).error).toMatch(/invalid/i);
   });
@@ -37,8 +42,10 @@ describe('parseBackupJson', () => {
     expect(preview.data.data.flights).toEqual([flight]);
   });
 
-  it('rejects a bare array with non-flight rows', () => {
-    expect(parseBackupJson(JSON.stringify([flight, 42])).error).toBeTruthy();
+  it('leaves non-flight rows out of a bare array and lists them', () => {
+    const { preview } = parseBackupJson(JSON.stringify([flight, 42]));
+    expect(preview.data.data.flights).toEqual([flight]);
+    expect(preview.skipped).toHaveLength(1);
   });
 
   it('rejects empty / non-JSON text', () => {
@@ -75,11 +82,12 @@ describe('parseBackupJson — Drive payload branch (schemaVersion)', () => {
     expect(preview.data.data.residence).toEqual([residenceDay]);
   });
 
-  it('rejects a Drive payload with junk flight rows', () => {
+  it('leaves junk flight rows out of a Drive payload; they never reach the restore', () => {
     const text = JSON.stringify({ schemaVersion: 1, flights: [flight, 'junk'], residence: [] });
     const { preview, error } = parseBackupJson(text);
-    expect(preview).toBeUndefined();
-    expect(error).toMatch(/invalid/i);
+    expect(error).toBeUndefined();
+    expect(preview.data.data.flights).toEqual([flight]);
+    expect(preview.skipped).toEqual([expect.objectContaining({ kind: 'flight' })]);
   });
 
   it('falls through to "non reconnu" when flights is not an array', () => {

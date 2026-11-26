@@ -60,7 +60,7 @@ describe('runBackup', () => {
       .mockResolvedValueOnce(okJson({ id: 'FILE' }));                // PATCH media
     await runBackup({ flights: [], residence: [], settings: {} });
     const patch = globalThis.fetch.mock.calls[2];
-    expect(String(patch[0])).toContain('/FILE?uploadType=media');
+    expect(String(patch[0])).toContain('/FILE?uploadType=multipart'); // content + labels in one request
     expect(patch[1].method).toBe('PATCH');
   });
 
@@ -93,7 +93,7 @@ describe('runBackup blob mirror (includeBlobs)', () => {
     globalThis.fetch
       .mockResolvedValueOnce(okJson({ files: [{ id: 'FOLDER' }] }))   // root folder search
       .mockResolvedValueOnce(okJson({ files: [{ id: 'FILE' }] }))     // backup-file search
-      .mockResolvedValueOnce(okJson({ id: 'FILE' }))                  // PATCH media
+      .mockResolvedValueOnce(okJson({ id: 'FILE' }))                  // PATCH (multipart)
       .mockResolvedValueOnce(okJson({ files: [{ id: 'OFPF' }] }))     // ofps folder search
       .mockResolvedValueOnce(okJson({ files: [{ id: 'BPF' }] }))      // boarding-passes folder search
       // listFiles(ofps): f1 already present (ofp-f1.pdf), f2 missing
@@ -107,7 +107,8 @@ describe('runBackup blob mirror (includeBlobs)', () => {
 
     await runBackup({ flights: [], residence: [], settings: {}, includeBlobs: true });
 
-    const multipart = globalThis.fetch.mock.calls.filter(([url]) => String(url).includes('uploadType=multipart'));
+    // New-file uploads only (POST); the backup JSON itself is updated with a multipart PATCH.
+    const multipart = globalThis.fetch.mock.calls.filter(([url, init]) => String(url).includes('uploadType=multipart') && init.method === 'POST');
     // 3 uploads: ofp-f2 (f1 skipped) + 2 boarding passes
     expect(multipart.length).toBe(3);
   });
@@ -131,7 +132,7 @@ describe('runBackup blob mirror (includeBlobs)', () => {
     globalThis.fetch
       .mockResolvedValueOnce(okJson({ files: [{ id: 'FOLDER' }] }))   // root folder search
       .mockResolvedValueOnce(okJson({ files: [{ id: 'FILE' }] }))     // backup-file search
-      .mockResolvedValueOnce(okJson({ id: 'FILE' }))                  // PATCH media
+      .mockResolvedValueOnce(okJson({ id: 'FILE' }))                  // PATCH (multipart)
       .mockResolvedValueOnce(okJson({ files: [{ id: 'OFPF' }] }))     // ofps folder search
       .mockResolvedValueOnce(okJson({ files: [{ id: 'BPF' }] }))      // boarding-passes folder search
       .mockResolvedValueOnce(okJson({ files: [] }))                   // listFiles(ofps): none
@@ -144,7 +145,7 @@ describe('runBackup blob mirror (includeBlobs)', () => {
 
     // Pull the uploaded names out of the multipart metadata parts.
     const uploadedNames = globalThis.fetch.mock.calls
-      .filter(([url]) => String(url).includes('uploadType=multipart'))
+      .filter(([url, init]) => String(url).includes('uploadType=multipart') && init.method === 'POST')
       .map(([, init]) => {
         const meta = init.body.get('metadata'); // FormData → metadata Blob
         return meta;

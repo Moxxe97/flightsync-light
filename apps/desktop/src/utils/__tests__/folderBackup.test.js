@@ -63,6 +63,20 @@ describe('runFolderBackup', () => {
     expect(fsMock.writeTextFile).not.toHaveBeenCalled();
   });
 
+  it('includes the archived years in the JSON snapshot', async () => {
+    const archives = [{ year: '2025', flights: [{ id: 'a1', date: '2025-12-30', flightNumber: 'AC0051' }], residence: [] }];
+    await runFolderBackup({ folder: '/Users/x/Backups', flights: FLIGHTS, residence: RES, settings: {}, archives });
+    const payload = JSON.parse(fsMock.writeTextFile.mock.calls[0][1]);
+    expect(payload.archives).toEqual(archives);
+  });
+
+  it('still backs up in January, when only the archived years hold data', async () => {
+    const archives = [{ year: '2025', flights: [{ id: 'a1', date: '2025-12-30', flightNumber: 'AC0051' }], residence: [] }];
+    const r = await runFolderBackup({ folder: '/Users/x/Backups', flights: [], residence: [], settings: {}, archives });
+    expect(r.skipped).toBeUndefined();
+    expect(fsMock.writeTextFile).toHaveBeenCalledTimes(1);
+  });
+
   it('writes the JSON snapshot with the Drive payload shape', async () => {
     await runFolderBackup({ folder: '/Users/x/Backups', flights: FLIGHTS, residence: RES, settings: {} });
     const [path, text] = fsMock.writeTextFile.mock.calls[0];

@@ -39,7 +39,7 @@ vi.mock('../utils/cloudAuth', () => ({
 const runBackupMock = vi.fn(async () => {});
 vi.mock('../utils/driveBackup', () => ({
   runBackup: (...args) => runBackupMock(...args),
-  findBackup: vi.fn(async () => null),
+  listBackups: vi.fn(async () => []),
   downloadBackup: vi.fn(async () => ''),
   restoreBlobs: vi.fn(async () => ({ ofps: 0, boardingPasses: 0 })),
 }));
