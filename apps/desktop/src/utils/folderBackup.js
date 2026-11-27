@@ -1,13 +1,13 @@
 // ─── Local-folder backup destination ─────────────────────────────
 // Same payload and layout as the Drive backup so a pilot can switch
 // destinations (or restore from either) without conversion:
-//   <folder>/flightsync-light-backup.json     (overwritten in place)
+//   <folder>/flightsync-light-backup.json     (written as .tmp, then renamed over it)
 //   <folder>/ofps/ofp-{flightId}.pdf          (write-once)
 //   <folder>/boarding-passes/bp-{date}-{n}.*  (write-once, 0-based per-date index)
 // Pointing the folder inside iCloud Drive/Dropbox gives off-device backup
 // with no account and no OAuth.
 import {
-  writeTextFile, writeFile, mkdir, exists, readDir, readFile, lstat,
+  writeTextFile, writeFile, mkdir, exists, readDir, readFile, lstat, rename,
 } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { buildBackupPayload, BACKUP_FILENAME } from './driveBackup';
@@ -103,8 +103,17 @@ export async function runFolderBackup({ folder, flights, residence, settings, ar
   if (await lstatSymlink(backupPath)) {
     throw new Error(`refusing to write backup: '${BACKUP_FILENAME}' is a symlink (possible tampering)`);
   }
+  // Write beside the backup, then swap it in with one rename (atomic on the same
+  // volume): a crash, a full disk or a sync client reading mid-write can no
+  // longer leave a truncated file as the only copy. The .tmp path gets the same
+  // symlink check, since writeTextFile would follow a link planted there.
+  const tmpPath = `${backupPath}.tmp`;
+  if (await lstatSymlink(tmpPath)) {
+    throw new Error(`refusing to write backup: '${BACKUP_FILENAME}.tmp' is a symlink (possible tampering)`);
+  }
   const payload = buildBackupPayload({ flights, residence, settings, archives });
-  await writeTextFile(backupPath, JSON.stringify(payload, null, 2));
+  await writeTextFile(tmpPath, JSON.stringify(payload, null, 2));
+  await rename(tmpPath, backupPath);
 
   let ofps = 0;
   const ofpsDir = `${folder}/ofps`;

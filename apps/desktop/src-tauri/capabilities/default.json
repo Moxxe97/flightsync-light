@@ -18,6 +18,7 @@
     "fs:allow-mkdir",
     "fs:allow-exists",
     "fs:allow-read-dir",
-    "fs:allow-lstat"
+    "fs:allow-lstat",
+    "fs:allow-rename"
   ]
 }

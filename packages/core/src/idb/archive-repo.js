@@ -64,3 +64,14 @@ export async function deleteArchiveYear(year) {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+// Delete every archived year ("Delete ALL data").
+export async function clearAllArchiveYears() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}

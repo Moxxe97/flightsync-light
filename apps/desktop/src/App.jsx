@@ -18,6 +18,7 @@ import { getAllOFPFlightIds, getAllBoardingPassInfo, getArchiveYear, getOFP } fr
 import { listArchiveYears, saveYearToArchive, migrateLocalStorageArchives, restoreArchiveYears } from './utils/archiveStore';
 import { backupYearToDrive, backupAllYears, restoreAllFromDrive } from './utils/driveArchive';
 import { parseBackupJson, sanitizeStoredRows, isValidFlight } from './utils/importValidation';
+import { wipeLocalData } from './utils/wipeDevice';
 import { decodeIpcText } from './utils/decodeIpcText';
 import { importKind } from './utils/importKind';
 import { buildFlightsCsv, looksLikeFlightRow } from './utils/exportCsv';
@@ -1031,20 +1032,26 @@ export default function FlightSyncSystem() {
     });
   }, [deviceId]);
 
+  // Everything on this device goes: live data, archived years, OFP PDFs,
+  // boarding passes, the pre-restore snapshot. Sign-out and the backup folder
+  // go FIRST: otherwise the next flight typed in would be auto-backed up over
+  // this device's Drive file / folder copy, replacing a full backup with an
+  // almost empty one. The backups themselves are never touched.
   const performClearAllData = async () => {
-    try {
-      await Promise.all([
-        storage.delete(STORAGE_KEYS.FLIGHTS),
-        storage.delete(STORAGE_KEYS.RESIDENCE),
-        storage.delete(STORAGE_KEYS.SYNC_LOG),
-      ]);
-      setFlights([]);
-      setResidence([]);
-      setBackupState((prev) => ({ ...prev, log: [] }));
-      notify("All data has been deleted", "info");
-    } catch {
-      notify("Error while deleting", "error");
-    }
+    const failed = [];
+    try { await signOut(); } catch { failed.push('Google sign-out'); }
+    const nextSettings = { ...settings, backupFolder: '' };
+    setSettings(nextSettings);
+    try { await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings)); } catch { failed.push('backup folder setting'); }
+    let wiped = { failed: [] };
+    try { wiped = await wipeLocalData(); } catch { wiped = { failed: ['data'] }; }
+    failed.push(...wiped.failed);
+    setFlights([]);
+    setResidence([]);
+    setBackupState((prev) => ({ ...prev, log: [], lastBackup: null }));
+    await Promise.allSettled([loadArchives(), refreshOFPIds(), refreshBoardingPassDates()]);
+    if (failed.length) notify(`Some data could not be deleted: ${failed.join(', ')}. Try again.`, "error");
+    else notify("All data on this device has been deleted", "info");
   };
 
   // ─── DELETE FLIGHT ───────────────────────────────────
@@ -1625,7 +1632,7 @@ export default function FlightSyncSystem() {
       <ConfirmModal
         open={clearAllConfirm}
         title="Delete ALL data?"
-        message="This action is irreversible. Make sure you have a backup before continuing."
+        message="Deletes everything on this device: flights, residence days, archived years, flight plans (OFP PDFs) and boarding passes. It also signs you out of Google and disconnects the backup folder, so the next backup cannot replace your backups with an empty app. Your backups on Google Drive and in your backup folder are kept — you can restore from them later. This cannot be undone."
         confirmLabel="Delete"
         cancelLabel="Cancel"
         danger
