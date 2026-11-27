@@ -180,3 +180,13 @@ export function bpToObjectURL(bp) {
   return URL.createObjectURL(blob);
 }
 
+// Delete every boarding pass ("Delete ALL data"); the legacy 'handles' store is left alone.
+export async function clearAllBoardingPasses() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BP_STORE, 'readwrite');
+    tx.objectStore(BP_STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}

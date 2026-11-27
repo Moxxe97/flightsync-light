@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { fsMock, idbMock, coreMock } = vi.hoisted(() => {
   const fsMock = {
     writeTextFile: vi.fn(async () => {}),
+    rename: vi.fn(async () => {}),
     writeFile: vi.fn(async () => {}),
     mkdir: vi.fn(async () => {}),
     exists: vi.fn(async () => false),
@@ -80,7 +81,8 @@ describe('runFolderBackup', () => {
   it('writes the JSON snapshot with the Drive payload shape', async () => {
     await runFolderBackup({ folder: '/Users/x/Backups', flights: FLIGHTS, residence: RES, settings: {} });
     const [path, text] = fsMock.writeTextFile.mock.calls[0];
-    expect(path).toBe('/Users/x/Backups/flightsync-light-backup.json');
+    expect(path).toBe('/Users/x/Backups/flightsync-light-backup.json.tmp');
+    expect(fsMock.rename).toHaveBeenCalledWith('/Users/x/Backups/flightsync-light-backup.json.tmp', '/Users/x/Backups/flightsync-light-backup.json');
     const payload = JSON.parse(text);
     expect(payload.schemaVersion).toBe(1);
     expect(payload.flights).toHaveLength(1);
@@ -233,9 +235,42 @@ describe('runFolderBackup symlink guards (H2)', () => {
     });
     await runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} });
     expect(fsMock.writeTextFile).toHaveBeenCalledWith(
-      '/b/flightsync-light-backup.json',
+      '/b/flightsync-light-backup.json.tmp',
       expect.any(String),
     );
+  });
+
+  it('refuses to write through a symlink planted at the temporary file', async () => {
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p === '/b/flightsync-light-backup.json.tmp') return { isSymlink: true };
+      throw new Error('ENOENT: no such file or directory');
+    });
+    await expect(
+      runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} }),
+    ).rejects.toThrow(/symlink/i);
+    expect(fsMock.writeTextFile).not.toHaveBeenCalled();
+    expect(fsMock.rename).not.toHaveBeenCalled();
+  });
+});
+
+// Review of 2026-11-26: the snapshot was written over the only copy in place, so a
+// crash, a full disk or a sync client grabbing it mid-write left a truncated backup.
+// It is now written beside it and swapped in with one rename.
+describe('runFolderBackup writes the snapshot safely', () => {
+  it('writes a temporary file first, then renames it over the backup', async () => {
+    await runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} });
+    expect(fsMock.writeTextFile).toHaveBeenCalledTimes(1);
+    expect(fsMock.writeTextFile.mock.calls[0][0]).toBe('/b/flightsync-light-backup.json.tmp');
+    expect(fsMock.rename).toHaveBeenCalledWith('/b/flightsync-light-backup.json.tmp', '/b/flightsync-light-backup.json');
+    expect(fsMock.writeTextFile.mock.invocationCallOrder[0]).toBeLessThan(fsMock.rename.mock.invocationCallOrder[0]);
+  });
+
+  it('leaves the existing backup alone when the write fails', async () => {
+    fsMock.writeTextFile.mockRejectedValueOnce(new Error('No space left on device'));
+    await expect(
+      runFolderBackup({ folder: '/b', flights: FLIGHTS, residence: RES, settings: {} }),
+    ).rejects.toThrow(/No space/);
+    expect(fsMock.rename).not.toHaveBeenCalled();
   });
 });
 
