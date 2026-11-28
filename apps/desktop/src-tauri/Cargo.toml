@@ -43,6 +43,15 @@ codegen-units = 1   # better optimization (slower build)
 opt-level = "s"     # optimize for size
 panic = "abort"     # no unwind tables
 
+# Xcode 27.2 (2026-11): its `strip` writes a malformed LINKEDIT ("mis-aligned
+# LINKEDIT string pool", see `dyld_info -fixups`) into anything linked for
+# macOS >= 12 with chained fixups. dyld refuses to dlopen such a dylib, so a
+# stripped proc-macro breaks the build ("can't find crate for `tauri_macros`").
+# Build scripts and proc-macros never ship: don't strip them. (The shipped Mac
+# binary is fixed in .cargo/config.toml with -no_fixup_chains.)
+[profile.release.build-override]
+strip = "none"
+
 # Xcode 27 (Swift 6.4): SwiftPM's new build system internalizes non-public
 # @_cdecl exports in release static libs, breaking the Rust-side link
 # (tauri-apps/tauri#16130). swift-rs 1.0.8 re-globalizes each package's own
