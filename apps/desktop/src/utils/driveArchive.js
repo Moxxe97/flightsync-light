@@ -3,6 +3,8 @@
 
 import { ensureAccessToken } from './cloudAuth';
 import { getOFPBytes, getBoardingPassesForDate, saveArchiveYear, saveOFP, saveBoardingPass } from '@flightsync/core/idb';
+import { MAX_BACKUP_BYTES, isValidOfpBlob, isValidBoardingPassBlob, blobMime } from './driveBackup';
+import { isValidFlight, isValidResidenceDay } from './importValidation';
 
 // FNV-1a 32-bit hash over the year's content. Stable for unchanged data, used
 // to decide whether a year needs re-uploading. Only flights/residence/manifest
@@ -230,6 +232,8 @@ export async function downloadYear({ year, folderId }) {
   const jsonId = byName.get('year.json');
   if (!jsonId) throw new Error(`year.json missing for ${year}`);
   const jsonBytes = await downloadFileBytes(jsonId);
+  // Same limits and checks as the main Drive restore (review of 2026-11-26).
+  if (jsonBytes.length > MAX_BACKUP_BYTES) throw new Error(`year.json too large (${year})`);
   const record = JSON.parse(new TextDecoder().decode(jsonBytes));
   const invalid = validateYearJson(record);
   if (invalid) throw new Error(`${invalid} (${year})`);
@@ -240,14 +244,20 @@ export async function downloadYear({ year, folderId }) {
   if (actualHash !== expectedHash) {
     throw new Error(`contentHash mismatch for ${year}: expected ${expectedHash}, computed ${actualHash}`);
   }
-  const flights = record.flights || [];
+  // Rows that fail the content checks (control characters, malformed dates…)
+  // are left out, with their flight plans; the rest of the year is restored.
+  const allFlights = record.flights || [];
+  const flights = allFlights.filter(isValidFlight);
+  const residence = (record.residence || []).filter(isValidResidenceDay);
+  const rejectedIds = new Set(allFlights.filter((f) => !isValidFlight(f)).map((f) => f?.id));
+  let skipped = (allFlights.length - flights.length) + ((record.residence || []).length - residence.length);
   const manifest = record.manifest || { ofpFlightIds: [], bpDates: [] };
 
   // 1) the archive year record (Drive is source of truth → overwrite)
   await saveArchiveYear({
     year: record.year,
     flights,
-    residence: record.residence || [],
+    residence,
     manifest,
     archivedAt: record.archivedAt || null,
   });
@@ -255,9 +265,11 @@ export async function downloadYear({ year, folderId }) {
   // 2) OFPs (upsert by flightId)
   let ofps = 0;
   for (const flightId of manifest.ofpFlightIds || []) {
+    if (rejectedIds.has(flightId)) continue;
     const fid = byName.get(ofpFileName(flightId));
     if (!fid) continue;
     const bytes = await downloadFileBytes(fid);
+    if (!isValidOfpBlob(bytes)) { skipped++; continue; } // not a PDF, or too large
     const flight = flights.find((f) => f.id === flightId) || {};
     await saveOFP(flightId, { date: flight.date, flightNumber: flight.flightNumber, fileName: ofpFileName(flightId), data: bytes, pageCount: null });
     ofps++;
@@ -273,14 +285,13 @@ export async function downloadYear({ year, folderId }) {
       if (!name.startsWith(prefix)) continue;
       if (existingNames.has(name)) continue;
       const bytes = await downloadFileBytes(id);
-      const ext = name.split('.').pop();
-      const mime = ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : ext === 'jpg' ? 'image/jpeg' : 'application/octet-stream';
-      await saveBoardingPass(date, new File([bytes], name, { type: mime }));
+      if (!isValidBoardingPassBlob(bytes)) { skipped++; continue; } // not a PDF/JPEG/PNG, or too large
+      await saveBoardingPass(date, new File([bytes], name, { type: blobMime(bytes) }));
       boardingPasses++;
     }
   }
 
-  return { year: record.year, flights: flights.length, ofps, boardingPasses };
+  return { year: record.year, flights: flights.length, ofps, boardingPasses, skipped };
 }
 
 // Restore every archived year found on Drive. One year's failure doesn't abort

@@ -208,6 +208,10 @@ describe('downloadFileBytes', () => {
 });
 
 import { downloadYear } from '../driveArchive';
+import { MAX_BACKUP_BYTES, MAX_BLOB_BYTES } from '../driveBackup';
+
+const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]); // %PDF-1
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
 
 describe('downloadYear', () => {
   it('restores the year record, OFPs, and boarding passes into idb', async () => {
@@ -229,8 +233,8 @@ describe('downloadYear', () => {
         { id: 'bid', name: 'bp-2025-03-02-0.pdf' },
       ] }) };
       if (url.includes('/files/jid?alt=media')) return { ok: true, arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(yearJson)).buffer };
-      if (url.includes('/files/oid?alt=media')) return { ok: true, arrayBuffer: async () => new Uint8Array([1, 2]).buffer };
-      if (url.includes('/files/bid?alt=media')) return { ok: true, arrayBuffer: async () => new Uint8Array([3, 4]).buffer };
+      if (url.includes('/files/oid?alt=media')) return { ok: true, arrayBuffer: async () => PDF.slice().buffer };
+      if (url.includes('/files/bid?alt=media')) return { ok: true, arrayBuffer: async () => PDF.slice().buffer };
       return { ok: true, json: async () => ({ files: [] }) };
     }));
     idb.saveArchiveYear.mockClear(); idb.saveOFP.mockClear(); idb.saveBoardingPass.mockClear();
@@ -244,7 +248,7 @@ describe('downloadYear', () => {
     const [bpDate, bpFile] = idb.saveBoardingPass.mock.calls[0];
     expect(bpDate).toBe('2025-03-02');
     expect(bpFile.name).toBe('bp-2025-03-02-0.pdf');
-    expect(out).toEqual({ year: '2025', flights: 1, ofps: 1, boardingPasses: 1 });
+    expect(out).toEqual({ year: '2025', flights: 1, ofps: 1, boardingPasses: 1, skipped: 0 });
   });
 
   it('skips a boarding pass already present for the date (idempotent)', async () => {
@@ -297,6 +301,70 @@ describe('downloadYear', () => {
     expect(idb.saveArchiveYear).not.toHaveBeenCalled();
     expect(idb.saveOFP).not.toHaveBeenCalled();
     expect(idb.saveBoardingPass).not.toHaveBeenCalled();
+  });
+});
+
+// Review of 2026-11-26: the archive restore saved whatever bytes sat under an
+// expected name, of any size, and stored rows without the content checks the
+// main restore applies. It now runs the same checks.
+describe('downloadYear checks what it restores', () => {
+  function stubYear(content, blobs, jsonBytes) {
+    const yearJson = { year: '2025', ...content, archivedAt: null, contentHash: contentHash(content) };
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const dec = decodeURIComponent(url);
+      if (dec.includes("'yf' in parents")) return { ok: true, json: async () => ({ files: [
+        { id: 'jid', name: 'year.json' },
+        ...Object.keys(blobs).map((name) => ({ id: name, name })),
+      ] }) };
+      if (url.includes('/files/jid?alt=media')) return { ok: true, arrayBuffer: async () => (jsonBytes || new TextEncoder().encode(JSON.stringify(yearJson))).buffer };
+      const m = /\/files\/([^?]+)\?alt=media/.exec(url);
+      if (m && blobs[decodeURIComponent(m[1])]) return { ok: true, arrayBuffer: async () => blobs[decodeURIComponent(m[1])].slice().buffer };
+      return { ok: true, json: async () => ({ files: [] }) };
+    }));
+    idb.saveArchiveYear.mockClear(); idb.saveOFP.mockClear(); idb.saveBoardingPass.mockClear();
+    idb.getBoardingPassesForDate.mockImplementation(async () => []);
+  }
+  const f1 = { id: 'f1', date: '2025-03-02', flightNumber: 'AC1' };
+
+  it('skips a flight plan or boarding pass whose bytes are not a PDF / image, and counts it', async () => {
+    stubYear({ flights: [f1], residence: [], manifest: { ofpFlightIds: ['f1'], bpDates: ['2025-03-02'] } },
+      { 'ofp-f1.pdf': new TextEncoder().encode('<html>'), 'bp-2025-03-02-0.pdf': new TextEncoder().encode('MZ\x90') });
+    const out = await downloadYear({ year: '2025', folderId: 'yf' });
+    expect(idb.saveOFP).not.toHaveBeenCalled();
+    expect(idb.saveBoardingPass).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ ofps: 0, boardingPasses: 0, skipped: 2 });
+  });
+
+  it('skips a file over the size limit', async () => {
+    const big = new Uint8Array(MAX_BLOB_BYTES + 1); big.set(PDF);
+    stubYear({ flights: [f1], residence: [], manifest: { ofpFlightIds: ['f1'], bpDates: [] } }, { 'ofp-f1.pdf': big });
+    const out = await downloadYear({ year: '2025', folderId: 'yf' });
+    expect(idb.saveOFP).not.toHaveBeenCalled();
+    expect(out.skipped).toBe(1);
+  });
+
+  it("stores a boarding pass with the type its bytes show, not the one its name claims", async () => {
+    stubYear({ flights: [], residence: [], manifest: { ofpFlightIds: [], bpDates: ['2025-03-02'] } }, { 'bp-2025-03-02-0.pdf': PNG });
+    await downloadYear({ year: '2025', folderId: 'yf' });
+    expect(idb.saveBoardingPass.mock.calls[0][1].type).toBe('image/png');
+  });
+
+  it('rejects a year.json over the backup size limit before reading it', async () => {
+    stubYear({ flights: [], residence: [], manifest: null }, {}, new Uint8Array(MAX_BACKUP_BYTES + 1));
+    await expect(downloadYear({ year: '2025', folderId: 'yf' })).rejects.toThrow(/too large/);
+    expect(idb.saveArchiveYear).not.toHaveBeenCalled();
+  });
+
+  it('leaves out rows that fail the content checks, with their flight plans', async () => {
+    const evil = { id: 'f2', date: '2025-03-03\r\nX-EVIL:injected', flightNumber: 'AC2' };
+    stubYear({ flights: [f1, evil], residence: [{ date: 'not-a-date' }], manifest: { ofpFlightIds: ['f1', 'f2'], bpDates: [] } },
+      { 'ofp-f1.pdf': PDF, 'ofp-f2.pdf': PDF });
+    const out = await downloadYear({ year: '2025', folderId: 'yf' });
+    const saved = idb.saveArchiveYear.mock.calls[0][0];
+    expect(saved.flights.map((f) => f.id)).toEqual(['f1']);
+    expect(saved.residence).toEqual([]);
+    expect(idb.saveOFP).toHaveBeenCalledTimes(1);
+    expect(out).toMatchObject({ flights: 1, ofps: 1, skipped: 2 });
   });
 });
 
