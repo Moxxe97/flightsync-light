@@ -5,3 +5,15 @@
 # to cargo. Remove together with the [patch.crates-io] swift-rs pin.
 [env]
 SWIFT_RS_RUNTIME_ARCHIVE = "Tauri"
+
+# Xcode 27.2 (2026-11): stripping a macOS binary that uses chained fixups
+# (deployment target >= 12; ours is 13.0) leaves a mis-aligned LINKEDIT string
+# pool that `dyld_info -fixups` rejects (0.2.14 and 0.2.15 shipped like that;
+# the main executable still launched, but dyld refuses such dylibs). Classic
+# dyld opcodes avoid it at the same size. Re-check with `dyld_info -fixups` on
+# the built app before removing.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-no_fixup_chains"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-no_fixup_chains"]
