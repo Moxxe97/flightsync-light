@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import './App.css';
 import { exportICS } from './utils/icsExport';
-import { runBackup, listBackups, downloadBackup, restoreBlobs, persistRestoreData, BACKUP_FILENAME } from './utils/driveBackup';
+import { runBackup, listBackups, downloadBackup, restoreBlobs, persistRestoreData } from './utils/driveBackup';
 import { describeBackup, describeSkipped } from './utils/backupLabel';
-import { runFolderBackup, restoreFolderBlobs, ensureFolderAccess } from './utils/folderBackup';
+import {
+  runFolderBackup, restoreFolderBlobs, ensureFolderAccess, readFolderBackupText,
+  pickBackupFolder, forgetBackupFolder, isFolderNotConfirmed,
+} from './utils/folderBackup';
 import { isMobilePlatform, getPlatform } from './utils/platform';
 import { mobileBackupRoot } from './utils/mobileBackupRoot';
 import { tallyResidence } from './utils/residence';
@@ -308,6 +311,7 @@ export default function FlightSyncSystem() {
       if (results.length === 0) { notify("No archives found on Drive", "info"); return; }
       const restored = results.filter((r) => r.status === 'restored').length;
       const failed = results.filter((r) => r.status === 'error').length;
+      const skippedItems = results.reduce((n, r) => n + (r.skipped || 0), 0);
       try {
         await loadArchives();
         await refreshBoardingPassDates();
@@ -315,7 +319,7 @@ export default function FlightSyncSystem() {
       } catch (err) {
         console.error('[restore] post-restore refresh failed:', err);
       }
-      notify(`Drive: ${restored} year(s) restored${failed ? `, ${failed} failed` : ''}`, failed ? 'error' : 'success');
+      notify(`Drive: ${restored} year(s) restored${failed ? `, ${failed} failed` : ''}${skippedItems ? ` — ${skippedItems} unreadable row(s) or file(s) left out` : ''}`, failed ? 'error' : 'success');
     } catch (err) {
       notify(`Restore error: ${err.message}`, 'error');
     } finally {
@@ -622,6 +626,7 @@ export default function FlightSyncSystem() {
   useEffect(() => () => clearTimeout(backupStatusResetRef.current), []);
 
   // ─── FOLDER BACKUP RUNNER ────────────────────────────
+  const folderConfirmNoticeRef = useRef(false); // "choose it again" shown once per session
   const runFolderBackupNow = useCallback(async () => {
     if (!settings.backupFolder) return;
     try {
@@ -630,9 +635,17 @@ export default function FlightSyncSystem() {
       setFolderBackupStatus({ at: now(), error: null });
     } catch (err) {
       console.warn('[folder-backup] failed:', err);
-      setFolderBackupStatus({ at: now(), error: err.message });
+      if (isFolderNotConfirmed(err)) {
+        // A folder chosen before 0.2.16 (or not via the native picker): Rust
+        // won't grant it until the pilot picks it once more.
+        const msg = 'Folder backup paused: choose the backup folder again (Change folder). A security update needs you to confirm it once.';
+        setFolderBackupStatus({ at: now(), error: msg });
+        if (!folderConfirmNoticeRef.current) { folderConfirmNoticeRef.current = true; notify(msg, 'error'); }
+      } else {
+        setFolderBackupStatus({ at: now(), error: err.message });
+      }
     }
-  }, [settings, flights, residence]);
+  }, [settings, flights, residence, notify]);
 
   // ─── DEBOUNCED FOLDER AUTO-BACKUP ────────────────────
   // Independent of Drive: Drive needs sign-in, the folder needs only a path.
@@ -662,25 +675,20 @@ export default function FlightSyncSystem() {
       }
       return;
     }
-    const invoke = window.__TAURI_INTERNALS__?.invoke;
-    if (!invoke) return;
-    const folder = await invoke('plugin:dialog|open', {
-      options: { directory: true, title: 'Choose the backup folder' },
-    });
-    if (typeof folder === 'string' && folder) {
-      // Grant the fs plugin's runtime scope access to exactly this folder
-      // (audit H1 — no static fs:scope-* is granted any more) before it's
-      // saved/used anywhere else. If the grant fails, don't persist a folder
-      // the app can't actually read/write — surface the failure instead.
-      try {
-        await ensureFolderAccess(folder);
-        const newSettings = { ...settings, backupFolder: folder };
-        setSettings(newSettings);
-        await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
-        notify('Backup folder configured', 'success');
-      } catch (err) {
-        notify(`Could not grant access to the folder: ${err.message}`, 'error');
-      }
+    // Rust shows the picker, records the folder and grants access to exactly
+    // that folder (review of 2026-11-26: the page can no longer name one). If
+    // that fails, nothing is saved.
+    try {
+      const folder = await pickBackupFolder();
+      if (!folder) return; // cancelled
+      const newSettings = { ...settings, backupFolder: folder };
+      setSettings(newSettings);
+      await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+      folderConfirmNoticeRef.current = false;
+      setFolderBackupStatus(null);
+      notify('Backup folder configured', 'success');
+    } catch (err) {
+      notify(`Could not grant access to the folder: ${err?.message || err}`, 'error');
     }
   };
 
@@ -688,15 +696,15 @@ export default function FlightSyncSystem() {
     const newSettings = { ...settings, backupFolder: '' };
     setSettings(newSettings);
     await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+    await forgetBackupFolder();
   };
 
   // ─── RESTORE FROM FOLDER ─────────────────────────────
   const restoreFromFolder = async () => {
     if (!settings.backupFolder) return;
     try {
-      await ensureFolderAccess(settings.backupFolder);
-      const { readTextFile } = await import('@tauri-apps/plugin-fs');
-      const text = await readTextFile(`${settings.backupFolder}/${BACKUP_FILENAME}`);
+      // Symlink guard + size cap, like the Drive restore.
+      const text = await readFolderBackupText(settings.backupFolder);
       const { preview, error } = parseBackupJson(text);
       if (error) { notify(error, 'error'); return; }
       // Same merge-or-replace preview as a file import; the tag makes the
@@ -973,12 +981,12 @@ export default function FlightSyncSystem() {
     // If this restore came from a local folder, re-import the PDF mirror.
     if (importPreview._folderBlobs) {
       try {
-        const { ofps, boardingPasses } = await restoreFolderBlobs(
+        const { ofps, boardingPasses, skipped } = await restoreFolderBlobs(
           importPreview._folderBlobs, [...finalFlights, ...archives.flatMap((a) => a.flights)]);
-        if (ofps || boardingPasses) {
+        if (ofps || boardingPasses || skipped) {
           await refreshBoardingPassDates();
           refreshOFPIds();
-          notify(`${ofps} OFPs + ${boardingPasses} boarding passes restored from the folder`, 'success');
+          notify(`${ofps} OFPs + ${boardingPasses} boarding passes restored from the folder${skipped ? ` — ${skipped} file(s) left out (not a PDF or image, or too large)` : ''}`, skipped ? 'error' : 'success');
         }
       } catch (err) {
         console.warn('[folder-restore-blobs] failed:', err);
@@ -1043,6 +1051,7 @@ export default function FlightSyncSystem() {
     const nextSettings = { ...settings, backupFolder: '' };
     setSettings(nextSettings);
     try { await storage.set(STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings)); } catch { failed.push('backup folder setting'); }
+    await forgetBackupFolder();
     let wiped = { failed: [] };
     try { wiped = await wipeLocalData(); } catch { wiped = { failed: ['data'] }; }
     failed.push(...wiped.failed);

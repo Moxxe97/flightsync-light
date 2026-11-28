@@ -50,10 +50,16 @@ const restoreFolderBlobsMock = vi.fn(async () => ({ ofps: 0, boardingPasses: 0 }
 // real ACL grant is only meaningful against a live Tauri backend, and is
 // covered by folderBackup.test.js + the controller's build smoke.
 const ensureFolderAccessMock = vi.fn(async () => {});
+const pickBackupFolderMock = vi.fn(async () => '/Users/x/NewFolder');
+const forgetBackupFolderMock = vi.fn(async () => {});
 vi.mock('../utils/folderBackup', () => ({
   runFolderBackup: (...args) => runFolderBackupMock(...args),
   restoreFolderBlobs: (...args) => restoreFolderBlobsMock(...args),
   ensureFolderAccess: (...args) => ensureFolderAccessMock(...args),
+  readFolderBackupText: async (folder) => { await ensureFolderAccessMock(folder); return readTextFileMock(`${folder}/flightsync-light-backup.json`); },
+  pickBackupFolder: (...args) => pickBackupFolderMock(...args),
+  forgetBackupFolder: (...args) => forgetBackupFolderMock(...args),
+  isFolderNotConfirmed: (err) => /BACKUP_FOLDER_NOT_CONFIRMED/.test(String(err?.message ?? err)),
 }));
 
 // ─── @tauri-apps/plugin-fs: provide readTextFile for the restore test ───
@@ -256,22 +262,20 @@ describe('App restore from folder', () => {
 });
 
 describe('App choose backup folder', () => {
-  // The folder picker goes through window.__TAURI_INTERNALS__.invoke
-  // ('plugin:dialog|open'); jsdom has no such global, so stub it per-test
-  // the way App.jsx expects (see chooseBackupFolder / the title-bar drag
-  // handler for the same optional-chaining pattern).
-  const dialogInvokeMock = vi.fn(async () => '/Users/x/NewFolder');
-
+  // The picker runs in Rust (pick_backup_folder), which records the folder and
+  // grants access to it; the page only gets the path back.
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     runFolderBackupMock.mockClear();
     restoreFolderBlobsMock.mockClear();
     ensureFolderAccessMock.mockClear();
     readTextFileMock.mockClear();
-    dialogInvokeMock.mockClear();
-    dialogInvokeMock.mockImplementation(async () => '/Users/x/NewFolder');
+    pickBackupFolderMock.mockReset();
+    pickBackupFolderMock.mockResolvedValue('/Users/x/NewFolder');
+    forgetBackupFolderMock.mockClear();
     window.localStorage.clear();
-    window.__TAURI_INTERNALS__ = { invoke: (...args) => dialogInvokeMock(...args) };
+    // isMobilePlatform() asks Rust for the platform through the Tauri bridge.
+    window.__TAURI_INTERNALS__ = { invoke: async (cmd) => (cmd === 'platform_name' ? 'desktop' : null) };
   });
   afterEach(() => {
     vi.runOnlyPendingTimers();
@@ -280,46 +284,73 @@ describe('App choose backup folder', () => {
     delete window.__TAURI_INTERNALS__;
   });
 
-  it('picking a folder grants fs access for it and saves it to settings', async () => {
+  async function openBackupTab() {
     await renderApp();
-
     const backupTabBtn = screen.getByRole('button', { name: /Backup|Sauvegardes/i });
     await act(async () => { fireEvent.click(backupTabBtn); });
-
+  }
+  async function clickPick() {
     const pickBtn = await screen.findByRole('button', { name: /Choose a folder/i });
     await act(async () => {
       fireEvent.click(pickBtn);
       await Promise.resolve();
       await Promise.resolve();
     });
+  }
 
-    expect(ensureFolderAccessMock).toHaveBeenCalledWith('/Users/x/NewFolder');
+  it('picking a folder saves it to settings', async () => {
+    await openBackupTab();
+    await clickPick();
+    expect(pickBackupFolderMock).toHaveBeenCalled();
     await screen.findByText('Backup folder configured');
     expect(JSON.parse(window.localStorage.getItem('ac-sync-settings')).backupFolder).toBe('/Users/x/NewFolder');
   });
 
-  it('grant failure surfaces an error and does not persist the folder', async () => {
-    ensureFolderAccessMock.mockRejectedValueOnce(new Error('Permission denied'));
-
-    await renderApp();
-
-    const backupTabBtn = screen.getByRole('button', { name: /Backup|Sauvegardes/i });
-    await act(async () => { fireEvent.click(backupTabBtn); });
-
-    const pickBtn = await screen.findByRole('button', { name: /Choose a folder/i });
-    await act(async () => {
-      fireEvent.click(pickBtn);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(ensureFolderAccessMock).toHaveBeenCalledWith('/Users/x/NewFolder');
-    await screen.findByText("Could not grant access to the folder: Permission denied");
-
-    // The folder must NOT have been saved: no backupFolder in settings, and
-    // the picker button ("no folder configured" state) is still shown.
+  it('a failed pick surfaces an error and does not persist the folder', async () => {
+    pickBackupFolderMock.mockRejectedValueOnce(new Error('Permission denied'));
+    await openBackupTab();
+    await clickPick();
+    await screen.findByText('Could not grant access to the folder: Permission denied');
     const storedSettings = window.localStorage.getItem('ac-sync-settings');
     expect(storedSettings ? JSON.parse(storedSettings).backupFolder : undefined).toBeFalsy();
     expect(screen.getByRole('button', { name: /Choose a folder/i })).toBeTruthy();
+  });
+
+  it('cancelling the picker changes nothing', async () => {
+    pickBackupFolderMock.mockResolvedValueOnce(null);
+    await openBackupTab();
+    await clickPick();
+    const storedSettings = window.localStorage.getItem('ac-sync-settings');
+    expect(storedSettings ? JSON.parse(storedSettings).backupFolder : undefined).toBeFalsy();
+  });
+
+  it('turning folder backup off makes the app forget the folder', async () => {
+    window.localStorage.setItem('ac-sync-settings', JSON.stringify({ backupFolder: '/Users/x/FlightSync' }));
+    await openBackupTab();
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /Turn off/i })); });
+    expect(forgetBackupFolderMock).toHaveBeenCalled();
+    expect(JSON.parse(window.localStorage.getItem('ac-sync-settings')).backupFolder).toBe('');
+  });
+});
+
+describe('a folder chosen before the security update', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    runFolderBackupMock.mockReset();
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  it('asks the pilot to choose it again', async () => {
+    runFolderBackupMock.mockRejectedValue(new Error('BACKUP_FOLDER_NOT_CONFIRMED: choose the backup folder again'));
+    window.localStorage.setItem('ac-sync-settings', JSON.stringify({ backupFolder: '/Users/x/FlightSync' }));
+    window.localStorage.setItem('ac-flights-data', JSON.stringify([{ id: 'f1', date: '2026-03-15', flightNumber: 'AC123' }]));
+    await renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3 * 60 * 1000); });
+    expect(await screen.findByText(/choose the backup folder again/i)).toBeTruthy();
   });
 });

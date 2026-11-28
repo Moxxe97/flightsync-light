@@ -26,6 +26,11 @@ vi.mock('../utils/cloudAuth', () => ({
 }));
 
 const wipeMock = vi.fn(async () => ({ failed: [] }));
+const forgetFolderMock = vi.fn(async () => {});
+vi.mock('../utils/folderBackup', async () => {
+  const actual = await vi.importActual('../utils/folderBackup');
+  return { ...actual, forgetBackupFolder: (...a) => forgetFolderMock(...a) };
+});
 vi.mock('../utils/wipeDevice', () => ({ wipeLocalData: (...a) => wipeMock(...a) }));
 
 vi.mock('../utils/driveBackup', async () => {
@@ -87,6 +92,7 @@ describe('Delete ALL data', () => {
     expect(signOutMock).toHaveBeenCalled();
     expect(signOutMock.mock.invocationCallOrder[0]).toBeLessThan(wipeMock.mock.invocationCallOrder[0]);
     expect(JSON.parse(window.localStorage.getItem('ac-sync-settings'))).toEqual(expect.objectContaining({ backupReminder: 14, backupFolder: '' }));
+    expect(forgetFolderMock).toHaveBeenCalled(); // Rust forgets the picked folder too
     expect(await screen.findByText(/All data on this device has been deleted/)).toBeTruthy();
   });
 

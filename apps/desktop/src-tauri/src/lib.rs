@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 #[cfg(desktop)]
 use std::time::{Duration, Instant};
-#[cfg(any(desktop, target_os = "android"))]
+use std::path::{Component, Path};
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
@@ -492,19 +492,103 @@ fn platform_name() -> String {
     }
 }
 
-/// Grants the fs plugin's runtime scope read/write access to a single,
-/// user-picked directory (recursively, so its `ofps/`/`boarding-passes/`
-/// sub-folders are covered too). Called by the JS side right after the
-/// folder picker resolves, and again (idempotently) before every folder
-/// backup/restore operation — the capability file grants no static
-/// `fs:scope-*`, so without this the fs commands have nothing allowed and
-/// every read/write is denied (audit H1: this replaces the previous
-/// `fs:scope-home-recursive`, which authorized the entire home directory).
+// ─── Backup folder (review of 2026-11-26) ────────────────────────────
+// The fs capability grants no static `fs:scope-*` (audit H1), so the folder
+// the pilot picked must be re-granted to the fs plugin's runtime scope on
+// every launch. That grant used to accept ANY path the page sent, so a
+// compromised page could open read/write access to e.g. ~/Library/LaunchAgents.
+// Now the folder is picked here, in Rust, and remembered in the app config
+// dir (which no fs scope covers, so the page cannot rewrite the record);
+// `allow_backup_folder` only re-grants that recorded folder. On mobile the
+// backup lives inside the app's Documents dir, already in the static scope.
+
+const BACKUP_FOLDER_RECORD: &str = "backup-folder.txt";
+const BACKUP_FOLDER_NOT_CONFIRMED: &str = "BACKUP_FOLDER_NOT_CONFIRMED";
+
+/// True when `requested` is exactly the folder recorded at pick time, or lies
+/// inside `inside` (mobile: the app's Documents dir). Absolute paths only, no
+/// `..` steps (component-wise, so `/a/b2` is not inside `/a/b`).
+fn backup_folder_allowed(requested: &str, recorded: Option<&str>, inside: Option<&Path>) -> bool {
+    let req = Path::new(requested);
+    if requested.trim().is_empty()
+        || !req.is_absolute()
+        || req.components().any(|c| matches!(c, Component::ParentDir))
+    {
+        return false;
+    }
+    let norm = |s: &str| s.trim_end_matches('/').to_string();
+    if recorded.is_some_and(|r| norm(r) == norm(requested)) {
+        return true;
+    }
+    inside.is_some_and(|base| req.starts_with(base))
+}
+
+fn backup_folder_record_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|d| d.join(BACKUP_FOLDER_RECORD))
+}
+
+fn recorded_backup_folder(app: &tauri::AppHandle) -> Option<String> {
+    let text = std::fs::read_to_string(backup_folder_record_path(app)?).ok()?;
+    let path = text.trim();
+    (!path.is_empty()).then(|| path.to_string())
+}
+
+/// Shows the native folder picker, remembers the chosen folder and grants the
+/// fs scope access to it (recursively: `ofps/`, `boarding-passes/`). Returns
+/// the folder, or None when the pilot cancels.
+#[cfg(desktop)]
+#[tauri::command]
+async fn pick_backup_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    // Off the main thread (async command), as blocking_pick_folder requires.
+    let mut dialog = app.dialog().file().set_title("Choose the backup folder");
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    let Some(picked) = dialog.blocking_pick_folder() else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    let folder = path.to_string_lossy().into_owned();
+    let record = backup_folder_record_path(&app).ok_or("no app config folder")?;
+    if let Some(dir) = record.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&record, &folder).map_err(|e| e.to_string())?;
+    app.fs_scope()
+        .allow_directory(&path, true)
+        .map_err(|e| e.to_string())?;
+    Ok(Some(folder))
+}
+
+/// Re-grants the fs scope for the backup folder before a folder backup or
+/// restore. Refuses any folder other than the one picked in the native dialog
+/// (an older version's folder included: the pilot picks it once more).
 #[tauri::command]
 fn allow_backup_folder(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let recorded = recorded_backup_folder(&app);
+    #[cfg(mobile)]
+    let inside = app.path().document_dir().ok();
+    #[cfg(desktop)]
+    let inside: Option<std::path::PathBuf> = None;
+    if !backup_folder_allowed(&path, recorded.as_deref(), inside.as_deref()) {
+        return Err(format!("{BACKUP_FOLDER_NOT_CONFIRMED}: choose the backup folder again"));
+    }
     app.fs_scope()
         .allow_directory(&path, true)
         .map_err(|e| e.to_string())
+}
+
+/// Folder backup turned off, or "Delete ALL data": forget the recorded folder.
+#[tauri::command]
+fn forget_backup_folder(app: tauri::AppHandle) -> Result<(), String> {
+    let Some(record) = backup_folder_record_path(&app) else {
+        return Ok(());
+    };
+    match std::fs::remove_file(record) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+        _ => Ok(()),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -532,6 +616,8 @@ pub fn run() {
         load_refresh_token,
         delete_refresh_token,
         allow_backup_folder,
+        pick_backup_folder,
+        forget_backup_folder,
         platform_name
     ]);
 
@@ -542,6 +628,7 @@ pub fn run() {
         load_refresh_token,
         delete_refresh_token,
         allow_backup_folder,
+        forget_backup_folder,
         platform_name
     ]);
 
@@ -673,5 +760,43 @@ mod tests {
 
         let empty = parse_callback_query("");
         assert!(!is_terminal_callback(&empty));
+    }
+}
+
+#[cfg(test)]
+mod backup_folder_tests {
+    use super::backup_folder_allowed;
+    use std::path::Path;
+
+    #[test]
+    fn allows_only_the_recorded_folder() {
+        let rec = Some("/Users/x/Backups");
+        assert!(backup_folder_allowed("/Users/x/Backups", rec, None));
+        assert!(backup_folder_allowed("/Users/x/Backups/", rec, None));
+        assert!(!backup_folder_allowed("/Users/x", rec, None));
+        assert!(!backup_folder_allowed("/Users/x/Library/LaunchAgents", rec, None));
+        assert!(!backup_folder_allowed("/Users/x/Backups2", rec, None));
+    }
+
+    #[test]
+    fn refuses_everything_when_nothing_was_picked() {
+        assert!(!backup_folder_allowed("/Users/x/Backups", None, None));
+    }
+
+    #[test]
+    fn refuses_relative_paths_and_parent_steps() {
+        let rec = Some("/Users/x/Backups/../Library");
+        assert!(!backup_folder_allowed("/Users/x/Backups/../Library", rec, None));
+        assert!(!backup_folder_allowed("Backups", Some("Backups"), None));
+        assert!(!backup_folder_allowed("", Some(""), None));
+    }
+
+    #[test]
+    fn allows_folders_inside_the_mobile_documents_dir() {
+        let docs = Some(Path::new("/var/mobile/Containers/Data/Application/ABC/Documents"));
+        assert!(backup_folder_allowed("/var/mobile/Containers/Data/Application/ABC/Documents/FlightSync Light Backups", None, docs));
+        assert!(!backup_folder_allowed("/var/mobile/Containers/Data/Application/ABC/Documents2/x", None, docs));
+        assert!(!backup_folder_allowed("/var/mobile/Containers/Data/Application/ABC/Documents/../Library", None, docs));
+        assert!(!backup_folder_allowed("/etc", None, docs));
     }
 }

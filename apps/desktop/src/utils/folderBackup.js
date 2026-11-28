@@ -7,10 +7,13 @@
 // Pointing the folder inside iCloud Drive/Dropbox gives off-device backup
 // with no account and no OAuth.
 import {
-  writeTextFile, writeFile, mkdir, exists, readDir, readFile, lstat, rename,
+  writeTextFile, writeFile, mkdir, exists, readDir, readFile, readTextFile, lstat, rename,
 } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
-import { buildBackupPayload, BACKUP_FILENAME } from './driveBackup';
+import {
+  buildBackupPayload, BACKUP_FILENAME, MAX_BACKUP_BYTES, MAX_BLOB_BYTES,
+  isValidOfpBlob, isValidBoardingPassBlob, blobMime,
+} from './driveBackup';
 import { ofpFileName, bpFileName, extFromMime } from './driveArchive';
 import {
   getAllBoardingPassDates, getBoardingPassesForDate,
@@ -28,9 +31,27 @@ import {
 // Intentionally not try/caught here: if the grant itself fails, that should
 // surface like any other fs error rather than being swallowed, and the
 // fs call that follows would fail anyway if the folder isn't allowed.
+// Since 0.2.16 Rust only re-grants the folder picked in its own native picker
+// (pick_backup_folder); any other path is refused with BACKUP_FOLDER_NOT_CONFIRMED,
+// including a folder chosen in an older version — the pilot picks it once more.
 export async function ensureFolderAccess(folder) {
   if (!folder) return;
   await invoke('allow_backup_folder', { path: folder });
+}
+
+// Desktop: native folder picker run by Rust, which records the folder and grants
+// access to it. Returns the folder, or null when the pilot cancels.
+export async function pickBackupFolder() {
+  return (await invoke('pick_backup_folder')) || null;
+}
+
+// Folder backup turned off / "Delete ALL data". Best effort: never throws.
+export async function forgetBackupFolder() {
+  try { await invoke('forget_backup_folder'); } catch { /* not in Tauri, or nothing to forget */ }
+}
+
+export function isFolderNotConfirmed(err) {
+  return /BACKUP_FOLDER_NOT_CONFIRMED/.test(String(err?.message ?? err ?? ''));
 }
 
 async function ensureDirs(folder) {
@@ -151,12 +172,39 @@ export async function runFolderBackup({ folder, flights, residence, settings, ar
   return { ofps, boardingPasses };
 }
 
+// A folder file's size, read without opening it, so an oversized file is never
+// loaded into memory. Unknown size (lstat unavailable) → the byte checks after
+// reading still apply.
+async function tooBigOrLink(path, limit) {
+  try {
+    const info = await lstat(path);
+    return !!info?.isSymlink || Number(info?.size) > limit;
+  } catch {
+    return false;
+  }
+}
+
+// The folder backup's JSON, with the same guards as the Drive restore: no
+// reading through a planted symlink, and a size cap.
+export async function readFolderBackupText(folder) {
+  await ensureFolderAccess(folder);
+  const path = `${folder}/${BACKUP_FILENAME}`;
+  let info = null;
+  try { info = await lstat(path); } catch (e) { if (!isNotFoundError(e)) throw e; }
+  if (info?.isSymlink) throw new Error(`refusing to read backup: '${BACKUP_FILENAME}' is a symlink (possible tampering)`);
+  if (Number(info?.size) > MAX_BACKUP_BYTES) {
+    throw new Error(`backup file too large (over ${MAX_BACKUP_BYTES / (1024 * 1024)} MB)`);
+  }
+  return readTextFile(path);
+}
+
 // Re-import the folder's PDF mirrors into IndexedDB after a JSON restore.
 // flights: the restored flight rows (id/date/flightNumber feed saveOFP
 // metadata). Skips blobs already present in IDB.
 export async function restoreFolderBlobs(folder, flights) {
   await ensureFolderAccess(folder);
   let ofps = 0;
+  let skipped = 0; // not a PDF / image, or too large (same checks as the Drive restore)
   const ofpsDir = `${folder}/ofps`;
   if ((await exists(ofpsDir)) && !(await isUnsafePath(ofpsDir))) {
     const byId = new Map((flights || []).map((f) => [String(f.id), f]));
@@ -167,10 +215,13 @@ export async function restoreFolderBlobs(folder, flights) {
       const flight = byId.get(m[1]);
       if (!flight) continue;            // orphan mirror — flight row is gone
       if (await getOFP(m[1])) continue; // already in IDB
-      const data = await readFile(`${ofpsDir}/${e.name}`);
+      const path = `${ofpsDir}/${e.name}`;
+      if (await tooBigOrLink(path, MAX_BLOB_BYTES)) { skipped++; continue; }
+      const data = new Uint8Array(await readFile(path));
+      if (!isValidOfpBlob(data)) { skipped++; continue; }
       await saveOFP(m[1], {
         date: flight.date, flightNumber: flight.flightNumber,
-        fileName: e.name, data: new Uint8Array(data), pageCount: null,
+        fileName: e.name, data, pageCount: null,
       });
       ofps++;
     }
@@ -185,7 +236,7 @@ export async function restoreFolderBlobs(folder, flights) {
       if (e.isSymlink) continue; // planted symlink entry — never read through it
       const m = /^bp-(\d{4}-\d{2}-\d{2})-\d+\.(\w+)$/i.exec(e.name || '');
       if (!m) continue;
-      const [, date, ext] = m;
+      const [, date] = m;
       let existingNames = existingByDate.get(date);
       if (!existingNames) {
         const existing = await getBoardingPassesForDate(date);
@@ -193,12 +244,14 @@ export async function restoreFolderBlobs(folder, flights) {
         existingByDate.set(date, existingNames);
       }
       if (existingNames.has(e.name)) continue;
-      const data = await readFile(`${bpDir}/${e.name}`);
-      const type = ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-      await saveBoardingPass(date, new File([data], e.name, { type }));
+      const path = `${bpDir}/${e.name}`;
+      if (await tooBigOrLink(path, MAX_BLOB_BYTES)) { skipped++; continue; }
+      const data = new Uint8Array(await readFile(path));
+      if (!isValidBoardingPassBlob(data)) { skipped++; continue; }
+      await saveBoardingPass(date, new File([data], e.name, { type: blobMime(data) }));
       existingNames.add(e.name);
       boardingPasses++;
     }
   }
-  return { ofps, boardingPasses };
+  return { ofps, boardingPasses, skipped };
 }

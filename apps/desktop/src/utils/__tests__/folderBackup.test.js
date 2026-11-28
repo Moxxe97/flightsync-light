@@ -10,7 +10,8 @@ const { fsMock, idbMock, coreMock } = vi.hoisted(() => {
     mkdir: vi.fn(async () => {}),
     exists: vi.fn(async () => false),
     readDir: vi.fn(async () => []),
-    readFile: vi.fn(async () => new Uint8Array([1])),
+    readFile: vi.fn(async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])), // %PDF-
+    readTextFile: vi.fn(async () => '{}'),
     // Default: "not found" (ENOENT-like) — lstatSymlink() must treat this as "not a symlink".
     lstat: vi.fn(async () => { throw new Error('ENOENT: no such file or directory'); }),
   };
@@ -37,7 +38,11 @@ vi.mock('@tauri-apps/plugin-fs', () => fsMock);
 vi.mock('@flightsync/core/idb', () => idbMock);
 vi.mock('@tauri-apps/api/core', () => coreMock);
 
-import { runFolderBackup, restoreFolderBlobs } from '../folderBackup';
+import {
+  runFolderBackup, restoreFolderBlobs, readFolderBackupText,
+  pickBackupFolder, forgetBackupFolder, isFolderNotConfirmed,
+} from '../folderBackup';
+import { MAX_BACKUP_BYTES, MAX_BLOB_BYTES } from '../driveBackup';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -130,7 +135,7 @@ describe('restoreFolderBlobs', () => {
     const r = await restoreFolderBlobs('/b', FLIGHTS);
     expect(idbMock.saveOFP).toHaveBeenCalledWith('f1', expect.objectContaining({ fileName: 'ofp-f1.pdf' }));
     expect(idbMock.saveBoardingPass).toHaveBeenCalledTimes(1);
-    expect(r).toEqual({ ofps: 1, boardingPasses: 1 });
+    expect(r).toEqual({ ofps: 1, boardingPasses: 1, skipped: 0 });
   });
 
   // H1: same runtime grant, on the restore path — must happen before the
@@ -156,7 +161,7 @@ describe('restoreFolderBlobs', () => {
     const r = await restoreFolderBlobs('/b', FLIGHTS);
     expect(idbMock.saveOFP).not.toHaveBeenCalled();
     expect(idbMock.saveBoardingPass).not.toHaveBeenCalled();
-    expect(r).toEqual({ ofps: 0, boardingPasses: 0 });
+    expect(r).toEqual({ ofps: 0, boardingPasses: 0, skipped: 0 });
   });
 });
 
@@ -309,5 +314,86 @@ describe('restoreFolderBlobs symlink guards (H3)', () => {
     const r = await restoreFolderBlobs('/b', FLIGHTS);
     expect(fsMock.readDir.mock.calls.some(([p]) => p === '/b/ofps')).toBe(false);
     expect(r.ofps).toBe(0);
+  });
+});
+
+// Review of 2026-11-26: the folder restore saved whatever bytes sat under an
+// expected name, of any size. It now runs the same checks as the Drive restore.
+describe('restoreFolderBlobs checks what it restores', () => {
+  const both = async (p) => (p.endsWith('ofps') ? [{ name: 'ofp-f1.pdf' }] : [{ name: 'bp-2026-03-15-0.pdf' }]);
+  beforeEach(() => {
+    fsMock.exists.mockResolvedValue(true);
+    fsMock.readDir.mockImplementation(both);
+    idbMock.getOFP.mockResolvedValue(null);
+    idbMock.getBoardingPassesForDate.mockResolvedValue([]);
+  });
+
+  it('skips files whose bytes are not a PDF / image, and counts them', async () => {
+    fsMock.readFile.mockResolvedValue(new TextEncoder().encode('<html>'));
+    const r = await restoreFolderBlobs('/b', FLIGHTS);
+    expect(idbMock.saveOFP).not.toHaveBeenCalled();
+    expect(idbMock.saveBoardingPass).not.toHaveBeenCalled();
+    expect(r).toEqual({ ofps: 0, boardingPasses: 0, skipped: 2 });
+  });
+
+  it('skips a file over the size limit without reading it', async () => {
+    fsMock.lstat.mockImplementation(async (p) => {
+      if (p.endsWith('.pdf')) return { isSymlink: false, size: MAX_BLOB_BYTES + 1 };
+      throw new Error('ENOENT: no such file or directory');
+    });
+    const r = await restoreFolderBlobs('/b', FLIGHTS);
+    expect(fsMock.readFile).not.toHaveBeenCalled();
+    expect(r.skipped).toBe(2);
+  });
+
+  it('stores a boarding pass with the type its bytes show, not the one its name claims', async () => {
+    fsMock.readDir.mockImplementation(async (p) => (p.endsWith('ofps') ? [] : [{ name: 'bp-2026-03-15-0.pdf' }]));
+    fsMock.readFile.mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d]));
+    await restoreFolderBlobs('/b', FLIGHTS);
+    expect(idbMock.saveBoardingPass.mock.calls[0][1].type).toBe('image/png');
+  });
+});
+
+describe('readFolderBackupText', () => {
+  it('reads the backup file after granting access to the folder', async () => {
+    fsMock.readTextFile.mockResolvedValue('{"schemaVersion":1}');
+    expect(await readFolderBackupText('/b')).toBe('{"schemaVersion":1}');
+    expect(coreMock.invoke).toHaveBeenCalledWith('allow_backup_folder', { path: '/b' });
+    expect(fsMock.readTextFile).toHaveBeenCalledWith('/b/flightsync-light-backup.json');
+  });
+  it('refuses to read through a symlink planted at the backup file', async () => {
+    fsMock.lstat.mockResolvedValue({ isSymlink: true, size: 10 });
+    await expect(readFolderBackupText('/b')).rejects.toThrow(/symlink/);
+    expect(fsMock.readTextFile).not.toHaveBeenCalled();
+  });
+  it('refuses a backup file over the size limit', async () => {
+    fsMock.lstat.mockResolvedValue({ isSymlink: false, size: MAX_BACKUP_BYTES + 1 });
+    await expect(readFolderBackupText('/b')).rejects.toThrow(/too large/);
+    expect(fsMock.readTextFile).not.toHaveBeenCalled();
+  });
+});
+
+// Review of 2026-11-26: allow_backup_folder granted file access to any path the
+// page sent. The folder is now picked in Rust, which records it and re-grants
+// only that folder; the page just asks.
+describe('backup folder choice lives on the Rust side', () => {
+  it('pickBackupFolder asks Rust to show the picker and returns the folder', async () => {
+    coreMock.invoke.mockResolvedValueOnce('/Users/x/Backups');
+    expect(await pickBackupFolder()).toBe('/Users/x/Backups');
+    expect(coreMock.invoke).toHaveBeenCalledWith('pick_backup_folder');
+  });
+  it('pickBackupFolder returns null when the pilot cancels', async () => {
+    coreMock.invoke.mockResolvedValueOnce(null);
+    expect(await pickBackupFolder()).toBeNull();
+  });
+  it('forgetBackupFolder tells Rust to forget it, and never throws', async () => {
+    coreMock.invoke.mockRejectedValueOnce(new Error('not in Tauri'));
+    await expect(forgetBackupFolder()).resolves.toBeUndefined();
+    expect(coreMock.invoke).toHaveBeenCalledWith('forget_backup_folder');
+  });
+  it('recognises the "choose it again" refusal', () => {
+    expect(isFolderNotConfirmed(new Error('BACKUP_FOLDER_NOT_CONFIRMED: choose the backup folder again'))).toBe(true);
+    expect(isFolderNotConfirmed('BACKUP_FOLDER_NOT_CONFIRMED')).toBe(true);
+    expect(isFolderNotConfirmed(new Error('Permission denied'))).toBe(false);
   });
 });

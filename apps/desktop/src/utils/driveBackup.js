@@ -303,13 +303,21 @@ export function sniffMagic(bytes) {
   return null;
 }
 
-function isValidOfpBlob(bytes) {
+// Shared by every restore path (Drive backup, Drive archive, local folder).
+export function isValidOfpBlob(bytes) {
   return sniffMagic(bytes) === 'pdf' && bytes.length <= MAX_BLOB_BYTES;
 }
 
-function isValidBoardingPassBlob(bytes) {
+export function isValidBoardingPassBlob(bytes) {
   const kind = sniffMagic(bytes);
   return (kind === 'pdf' || kind === 'jpeg' || kind === 'png') && bytes.length <= MAX_BLOB_BYTES;
+}
+
+// The MIME type a restored boarding pass is stored with: from its bytes, never
+// from its name or Drive's reported type (both can be anything).
+const MIME_BY_KIND = { pdf: 'application/pdf', jpeg: 'image/jpeg', png: 'image/png' };
+export function blobMime(bytes) {
+  return MIME_BY_KIND[sniffMagic(bytes)] || 'application/octet-stream';
 }
 
 // Re-download the PDF mirror after a JSON restore (new-Mac scenario). OFP files
@@ -368,7 +376,7 @@ export async function restoreBlobs(restoredFlights) {
       if (existingNames.has(file.name)) continue; // already restored for this date
       const bytes = await downloadBytes(token, file.id);
       if (!isValidBoardingPassBlob(bytes)) { skipped++; continue; } // M8: not a real/oversized PDF/JPEG/PNG
-      const mime = file.mimeType || 'application/octet-stream';
+      const mime = blobMime(bytes);
       // saveBoardingPass takes (date, File) — reconstruct a File from the bytes.
       await saveBoardingPass(date, new File([bytes], file.name, { type: mime }));
       existingNames.add(file.name); // guard against duplicate names within this folder too
